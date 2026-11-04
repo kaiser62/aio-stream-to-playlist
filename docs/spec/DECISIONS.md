@@ -13,6 +13,9 @@
 | 2026-11 | Build contained in `build/`; CI in GitHub Actions | User request |
 | 2026-11-04 | Player: mpv backend, IINA-style shortcuts; Phase 1 = external mpv window over JSON IPC, embedding later | Lowest risk first; see PLAYER.md |
 | 2026-11-04 | UI work uses the `ui-ux-pro-max` skill (installed in `.claude/skills/`) | User request |
+| 2026-11-04 | macOS embedding: mpv's `wid` is ignored by its macOS VO, so we let mpv open its own borderless window and attach it as a child window *below* our transparent Tauri player window (HTML overlay on top). Needs `macOSPrivateApi` | Verified working by screenshot; App Store (Mac) risk noted, DMG fine |
+| 2026-11-04 | libmpv loaded at runtime (dlopen), not linked | Keeps GPL/LGPL choice a packaging decision |
+| 2026-11-04 | Player UI is an in-window HTML overlay (`ui/player.*`) driven by `player://prop` events and allowlisted `player_exec/set` | Clean-room IINA look/behaviour, one codebase for all desktop OSes |
 
 ## Open questions
 See the end of PLAYER.md. Also: final product name, TorBox branding permission, keychain crate choice (`keyring`), Windows/Linux signing.

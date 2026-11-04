@@ -70,6 +70,7 @@ const App = {
     if (v === 'library') this.loadLibrary();
     if (v === 'addons') this.loadAddons();
     if (v === 'playlists') this.loadPlaylists();
+    if (v === 'player') this.loadPlayer(); else clearInterval(this._pnow);
     if (v === 'settings') this.loadSettings();
     window.scrollTo(0, 0);
   },
@@ -92,7 +93,7 @@ const App = {
     const h = location.hash.slice(1);
     this.renderResults();
     this.renderHitsEmpty();
-    this.show(['find', 'results', 'addons', 'library', 'playlists', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
+    this.show(['find', 'results', 'addons', 'library', 'playlists', 'player', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
   },
 
   async refreshKeyBanner() {
@@ -302,6 +303,41 @@ const App = {
       <span class="jt" title="${esc(r.title)}">${esc(r.title)}</span><span class="jd state-${esc(r.state)}">${esc(r.detail || r.state)}</span></div>`; }).join('') + '</div>';
     if (!j.finished) return setTimeout(() => this.poll(id, box), 2000);
     if (j.playlist) { box.firstChild.append(this.playerButtons(j.playlist)); this.toast('Playlist ready'); }
+  },
+
+  /* ---------- player tab ---------- */
+  async loadPlayer() {
+    const fmt = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+    const play = async (entries, index = 0) => { try { await invoke('player_play', {entries, index}); this.nowPlaying(fmt); } catch (e) { this.err(e); } };
+    $('#pl-go').onclick = () => { const v = $('#pl-open').value.trim(); if (!v) return; play([{title: v.split('/').pop().split('?')[0] || v, url: v}]); };
+    $('#pl-open').onkeydown = e => { if (e.key === 'Enter') $('#pl-go').click(); };
+    const rec = await invoke('player_recent').catch(() => []);
+    $('#pl-recent').innerHTML = rec.length ? rec.map((r, i) => {
+      const pct = r.dur > 0 ? Math.min(100, r.pos / r.dur * 100) : 0;
+      return `<div class="item pl-rec" data-i="${i}"><div class="body"><div class="t">${esc(r.title)}</div>
+        <div class="pl-prog"><i style="width:${pct}%"></i></div>
+        <div class="src">${r.pos > 5 ? 'Resume at ' + fmt(r.pos) + (r.dur ? ' of ' + fmt(r.dur) : '') : (r.dur ? fmt(r.dur) : 'Not started')}</div></div>
+        <button class="icon-btn" data-rm="${i}" aria-label="Remove from list">${ic('x')}</button></div>`; }).join('')
+      : '<p class="mut small">Nothing played yet. Files you play here show up with a resume point.</p>';
+    $$('#pl-recent .pl-rec').forEach(el => el.onclick = e => {
+      const r = rec[+el.dataset.i];
+      if (e.target.closest('[data-rm]')) { invoke('player_recent_remove', {url: r.url}).then(() => this.loadPlayer()); return; }
+      play([{title: r.title, url: r.url}]);
+    });
+    const keys = await invoke('player_keys').catch(() => []);
+    $('#pl-keys').innerHTML = keys.map(k => `<div class="krow"><kbd>${esc(k.key)}</kbd><span>${esc(k.desc)}</span></div>`).join('');
+    this.nowPlaying(fmt); clearInterval(this._pnow); this._pnow = setInterval(() => this.nowPlaying(fmt), 1000);
+  },
+  async nowPlaying(fmt) {
+    const p = await invoke('player_props').catch(() => ({}));
+    const box = $('#pl-now'); if (!box) return;
+    const title = p['media-title'] || p.filename;
+    if (!title) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `<div class="np"><div class="np-t"><span class="kick">Now playing</span><b>${esc(title)}</b>
+      <span class="mut small">${fmt(p['time-pos'])} / ${fmt(p.duration)}${p.pause ? ' · paused' : ''}</span></div>
+      <div class="np-b"><button class="btn" data-c="prev">Prev</button><button class="btn primary" data-c="toggle_pause">${p.pause ? 'Play' : 'Pause'}</button><button class="btn" data-c="next">Next</button><button class="btn danger" data-c="stop">Close</button></div></div>`;
+    $$('[data-c]', box).forEach(b => b.onclick = async () => { b.dataset.c === 'stop' ? await invoke('player_close').catch(() => {}) : await invoke('player_cmd', {cmd: b.dataset.c, arg: null}).catch(() => {}); setTimeout(() => this.nowPlaying(fmt), 150); });
   },
 
   /* ---------- players ---------- */

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Player</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="player.css">
+</head>
+<body>
+<div id="stage"></div>
+
+<header id="titlebar" data-tauri-drag-region>
+  <span id="title" data-tauri-drag-region></span>
+  <button class="tb-btn" id="pin" title="Float on top" aria-label="Float on top" aria-pressed="false" data-ic="pin"></button>
+</header>
+
+<div id="osd" aria-live="polite"></div>
+<div id="buffering"></div>
+<div id="flash" class="vfx"></div>
+
+<section id="osc" class="vfx" aria-label="Playback controls">
+  <div class="row seekrow">
+    <span class="time" id="cur">0:00</span>
+    <div class="slider" id="seek" role="slider" aria-label="Seek" tabindex="-1">
+      <div class="track">
+        <div class="buffer"></div><div class="loop" hidden></div><div class="fill"></div>
+        <div class="ticks"></div><div class="knob"></div>
+      </div>
+      <div class="tip"><span></span><small></small></div>
+    </div>
+    <span class="time" id="remain" title="Toggle remaining / total time">-0:00</span>
+  </div>
+  <div class="row ctrlrow">
+    <div class="group">
+      <div id="volume">
+        <button class="ibtn" id="mute" aria-label="Mute"></button>
+        <div class="slider" id="vol" role="slider" aria-label="Volume"><div class="track"><div class="fill"></div><div class="knob"></div></div></div>
+      </div>
+    </div>
+    <div class="group center">
+      <button class="ibtn" id="prev" aria-label="Previous" title="Previous (&lt;)" data-ic="prev"></button>
+      <button class="ibtn" id="back" aria-label="Back 10 seconds" title="Back 5 s (←)" data-ic="back"></button>
+      <button class="ibtn big" id="play" aria-label="Play / pause" title="Play / pause (Space)"></button>
+      <button class="ibtn" id="fwd" aria-label="Forward 10 seconds" title="Forward 5 s (→)" data-ic="fwd"></button>
+      <button class="ibtn" id="next" aria-label="Next" title="Next (&gt;)" data-ic="next"></button>
+    </div>
+    <div class="group right">
+      <button class="pill" id="speedpill" title="Playback speed (click to reset)">1x</button>
+      <button class="ibtn" id="btn-playlist" aria-label="Playlist" title="Playlist" aria-pressed="false" data-ic="list"></button>
+      <button class="ibtn" id="btn-settings" aria-label="Quick settings" title="Quick settings" aria-pressed="false" data-ic="sliders"></button>
+    </div>
+  </div>
+</section>
+
+<aside id="sidebar" aria-label="Sidebar">
+  <div class="sb-head"><div class="seg" id="sb-tabs"></div></div>
+  <div class="sb-body" id="sb-body"></div>
+</aside>
+
+<div id="ctx" role="menu"></div>
+<script src="player.js"></script>
+</body>
+</html>

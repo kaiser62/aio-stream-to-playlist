@@ -2,6 +2,16 @@
   "$schema": "../gen/schema/desktop-schema.json",
   "identifier": "default",
   "description": "Main window permissions",
-  "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "windows": ["main", "player"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-title"
+  ]
 }

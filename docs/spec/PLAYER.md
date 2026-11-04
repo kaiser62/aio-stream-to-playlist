@@ -8,7 +8,7 @@ Play playlist entries (HTTPS TorBox links, large mkv/mp4, HTTP range seeking) in
 ## Phases
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Spike: libmpv embedding in Tauri on macOS | TODO |
+| 0 | Spike: libmpv embedding in Tauri on macOS | DONE (child-window trick, see DECISIONS.md) |
 | 1 | Desktop: spawn mpv in its own window, JSON IPC control, generated `input.conf` (IINA keys), resume positions, `Play in app` button | code written, **UNVERIFIED at runtime** |
 | 2 | Embedded libmpv on macOS (render API into a native child view) + HTML control bar, full key map | TODO |
 | 3 | Windows + Linux embedding, packaging, signing/notarization, LGPL libmpv build pipeline | TODO |

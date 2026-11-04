@@ -66,6 +66,36 @@ impl PlayerCmd {
         })
     }
 
+    /// Inverse of `from_name`: the name and argument the UI uses for this command.
+    pub fn name(&self) -> (&'static str, Option<f64>) {
+        use PlayerCmd::*;
+        match self {
+            TogglePause => ("toggle_pause", None),
+            Seek(a) => ("seek", Some(*a)),
+            SeekAbs(a) => ("seek_abs", Some(*a)),
+            VolumeAdd(a) => ("volume_add", Some(*a)),
+            SetVolume(a) => ("set_volume", Some(*a)),
+            ToggleMute => ("toggle_mute", None),
+            SpeedMul(a) => ("speed_mul", Some(*a)),
+            SpeedReset => ("speed_reset", None),
+            Fullscreen => ("fullscreen", None),
+            FrameStep => ("frame_step", None),
+            FrameBack => ("frame_back", None),
+            AbLoop => ("ab_loop", None),
+            CycleSub => ("cycle_sub", None),
+            CycleAudio => ("cycle_audio", None),
+            SubDelay(a) => ("sub_delay", Some(*a)),
+            AudioDelay(a) => ("audio_delay", Some(*a)),
+            Screenshot => ("screenshot", None),
+            Next => ("next", None),
+            Prev => ("prev", None),
+            ChapterNext => ("chapter_next", None),
+            ChapterPrev => ("chapter_prev", None),
+            Stats => ("stats", None),
+            Stop => ("stop", None),
+        }
+    }
+
     /// The mpv command as a JSON-IPC array (numbers stay numbers).
     pub fn to_mpv(&self) -> Vec<Value> {
         use PlayerCmd::*;
@@ -170,17 +200,30 @@ pub fn input_conf() -> String {
 pub struct KeyInfo {
     pub key: String,
     pub desc: String,
+    pub cmd: String,
+    pub arg: Option<f64>,
 }
 
 /// Key list for a help overlay in the UI.
 pub fn key_list() -> Vec<KeyInfo> {
-    bindings().into_iter().map(|b| KeyInfo { key: b.key.to_string(), desc: b.desc.to_string() }).collect()
+    bindings()
+        .into_iter()
+        .map(|b| {
+            let (cmd, arg) = b.cmd.name();
+            KeyInfo { key: b.key.to_string(), desc: b.desc.to_string(), cmd: cmd.to_string(), arg }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------- mpv JSON IPC
 /// One newline-terminated IPC request.
 pub fn ipc_line(cmd: &[Value], request_id: u64) -> String {
     format!("{}\n", json!({ "command": cmd, "request_id": request_id }))
+}
+
+/// Observe line for the generic property at `OBSERVED[index]`.
+pub fn observe_generic_line(index: usize) -> Option<String> {
+    OBSERVED.get(index).map(|p| observe_line(OBS_FIRST_GENERIC + index as u64, p))
 }
 
 pub fn observe_line(id: u64, prop: &str) -> String {
@@ -192,8 +235,49 @@ pub const OBS_PATH: u64 = 2;
 pub const OBS_DURATION: u64 = 3;
 pub const OBS_PAUSE: u64 = 4;
 
+/// Properties streamed to the UI (besides time-pos / path / duration / pause, which have their own ids).
+pub const OBSERVED: &[&str] = &[
+    "volume", "mute", "speed", "media-title", "filename", "track-list", "chapter-list", "chapter",
+    "playlist", "playlist-pos", "loop-file", "loop-playlist", "sub-delay", "audio-delay", "sub-scale",
+    "sub-pos", "sub-visibility", "sid", "aid", "vid", "ab-loop-a", "ab-loop-b", "seeking",
+    "paused-for-cache", "demuxer-cache-time", "video-params", "hwdec-current", "hwdec", "brightness",
+    "contrast", "saturation", "gamma", "hue", "video-rotate", "video-aspect-override", "eof-reached",
+    "core-idle", "estimated-vf-fps", "video-zoom", "panscan", "deinterlace",
+];
+pub const OBS_FIRST_GENERIC: u64 = 100;
+
+/// Properties the UI may set (everything else is refused).
+pub const SETTABLE: &[&str] = &[
+    "volume", "mute", "speed", "pause", "sid", "aid", "vid", "sub-delay", "audio-delay", "sub-scale", "sub-pos",
+    "sub-visibility", "video-aspect-override", "video-rotate", "brightness", "contrast", "saturation", "gamma",
+    "hue", "hwdec", "loop-file", "loop-playlist", "video-zoom", "panscan", "ab-loop-a", "ab-loop-b", "deinterlace",
+    "audio-pitch-correction", "secondary-sid", "volume-max",
+];
+const COMMANDS: &[&str] = &[
+    "seek", "playlist-play-index", "playlist-next", "playlist-prev", "playlist-remove", "playlist-move",
+    "loadfile", "add", "cycle", "set", "multiply", "screenshot", "script-binding", "ab-loop", "frame-step",
+    "frame-back-step", "sub-add", "audio-add", "revert-seek", "cycle-values", "show-text",
+];
+
+/// Check a UI-supplied mpv command: only known commands, and property commands only on SETTABLE props.
+pub fn validate_exec(args: &[Value]) -> Result<(), String> {
+    let name = args.first().and_then(Value::as_str).ok_or("empty command")?;
+    if !COMMANDS.contains(&name) {
+        return Err(format!("command not allowed: {name}"));
+    }
+    if matches!(name, "add" | "cycle" | "set" | "multiply" | "cycle-values") {
+        let prop = args.get(1).and_then(Value::as_str).ok_or("missing property")?;
+        if !SETTABLE.contains(&prop) {
+            return Err(format!("property not allowed: {prop}"));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Event {
+    /// Generic observed property (name, value; `Null` when unavailable).
+    Prop(String, Value),
     Time(f64),
     Duration(f64),
     Path(String),
@@ -215,6 +299,10 @@ pub fn parse_event(line: &str) -> Event {
                 Some(OBS_DURATION) => data.and_then(Value::as_f64).map(Event::Duration).unwrap_or(Event::Other),
                 Some(OBS_PATH) => data.and_then(Value::as_str).map(|s| Event::Path(s.to_string())).unwrap_or(Event::Other),
                 Some(OBS_PAUSE) => data.and_then(Value::as_bool).map(Event::Pause).unwrap_or(Event::Other),
+                Some(i) if i >= OBS_FIRST_GENERIC => match v.get("name").and_then(Value::as_str) {
+                    Some(n) => Event::Prop(n.to_string(), data.cloned().unwrap_or(Value::Null)),
+                    None => Event::Other,
+                },
                 _ => Event::Other,
             }
         }
@@ -266,6 +354,48 @@ impl ResumeStore {
         } else {
             self.map.insert(k, pos);
         }
+    }
+}
+
+// ---------------------------------------------------------------- recent items
+#[derive(Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct RecentItem {
+    pub title: String,
+    pub url: String,
+    pub pos: f64,
+    pub dur: f64,
+    pub at: u64,
+}
+
+#[derive(Default)]
+pub struct RecentStore {
+    pub items: Vec<RecentItem>,
+}
+
+impl RecentStore {
+    pub fn load(path: &Path) -> Self {
+        let items = fs::read_to_string(path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        Self { items }
+    }
+
+    pub fn save(&self, path: &Path) -> io::Result<()> {
+        if let Some(d) = path.parent() {
+            fs::create_dir_all(d)?;
+        }
+        fs::write(path, serde_json::to_string(&self.items).unwrap_or_default())
+    }
+
+    /// Move (or add) an item to the front. Keeps the most recent 30, de-duplicated by `resume_key`.
+    pub fn touch(&mut self, title: &str, url: &str, pos: f64, dur: f64, at: u64) {
+        let k = resume_key(url);
+        self.items.retain(|i| resume_key(&i.url) != k);
+        self.items.insert(0, RecentItem { title: title.to_string(), url: url.to_string(), pos, dur, at });
+        self.items.truncate(30);
+    }
+
+    pub fn remove(&mut self, url: &str) {
+        let k = resume_key(url);
+        self.items.retain(|i| resume_key(&i.url) != k);
     }
 }
 
@@ -347,5 +477,57 @@ mod tests {
         r.save(&p).unwrap();
         assert_eq!(ResumeStore::load(&p).get("https://s/c.mkv"), Some(120.0));
         assert_eq!(ResumeStore::load(&d.path().join("missing.json")).get("x"), None);
+    }
+}
+
+#[cfg(test)]
+mod more_tests {
+    use super::*;
+
+    #[test]
+    fn exec_allowlist() {
+        assert!(validate_exec(&[json!("seek"), json!(5)]).is_ok());
+        assert!(validate_exec(&[json!("add"), json!("volume"), json!(5)]).is_ok());
+        assert!(validate_exec(&[json!("run"), json!("rm")]).is_err());
+        assert!(validate_exec(&[json!("set"), json!("input-ipc-server"), json!("x")]).is_err());
+        assert!(validate_exec(&[json!("cycle"), json!("script-opts")]).is_err());
+        assert!(validate_exec(&[]).is_err());
+    }
+
+    #[test]
+    fn generic_prop_events() {
+        let l = observe_generic_line(0).unwrap();
+        assert!(l.contains("observe_property") && l.contains("volume"));
+        assert_eq!(
+            parse_event(r#"{"event":"property-change","id":100,"name":"volume","data":70.0}"#),
+            Event::Prop("volume".into(), json!(70.0))
+        );
+        assert_eq!(
+            parse_event(r#"{"event":"property-change","id":101,"name":"mute"}"#),
+            Event::Prop("mute".into(), Value::Null)
+        );
+    }
+
+    #[test]
+    fn key_info_matches_bindings() {
+        for (k, b) in key_list().iter().zip(bindings()) {
+            assert_eq!(PlayerCmd::from_name(&k.cmd, k.arg), Some(b.cmd));
+        }
+    }
+
+    #[test]
+    fn recent_dedupes_and_caps() {
+        let mut r = RecentStore::default();
+        r.touch("A", "https://x/a.mkv?t=1", 20.0, 100.0, 1);
+        r.touch("B", "https://x/b.mkv", 5.0, 50.0, 2);
+        r.touch("A again", "https://x/a.mkv?t=2", 30.0, 100.0, 3);
+        assert_eq!(r.items.len(), 2);
+        assert_eq!(r.items[0].title, "A again");
+        for i in 0..40 {
+            r.touch("x", &format!("https://x/{i}"), 0.0, 0.0, i);
+        }
+        assert_eq!(r.items.len(), 30);
+        r.remove("https://x/39");
+        assert_eq!(r.items.len(), 29);
     }
 }

@@ -1,5 +1,9 @@
 #[cfg(desktop)]
+mod mpvlib;
+#[cfg(desktop)]
 mod player;
+#[cfg(target_os = "macos")]
+mod embed;
 
 use companion_core::{
     addons::{self, Addon},
@@ -376,15 +380,140 @@ fn open_playlist(_file: String, _player: Option<String>) -> Result<(), String> {
 }
 
 // ------------------------------------------------------------------ built-in player (mpv)
+/// Opens the playlist in the built-in player. Returns "embedded" (libmpv inside our own window,
+/// macOS) or "external" (separate mpv window).
 #[cfg(desktop)]
 #[tauri::command]
-fn player_open(app: tauri::AppHandle, st: State<AppState>, name: Option<String>, file: Option<String>, index: Option<usize>) -> Result<(), String> {
+async fn player_open(app: tauri::AppHandle, st: State<'_, AppState>, name: Option<String>, file: Option<String>, index: Option<usize>) -> Result<String, String> {
     let f = name.or(file).ok_or("no playlist given")?;
     let entries = playlist::read(&st.playlists(), &f).map_err(|e| e.to_string())?;
+    start_player(&app, &st.dir, entries, index.unwrap_or(0))
+}
+
+/// Plays a file path or URL (single item or a list) without needing a saved playlist.
+#[cfg(desktop)]
+#[tauri::command]
+async fn player_play(app: tauri::AppHandle, st: State<'_, AppState>, entries: Vec<Entry>, index: Option<usize>) -> Result<String, String> {
+    start_player(&app, &st.dir, entries, index.unwrap_or(0))
+}
+
+#[cfg(desktop)]
+fn start_player(app: &tauri::AppHandle, dir: &std::path::Path, entries: Vec<Entry>, index: usize) -> Result<String, String> {
     if entries.is_empty() {
-        return Err("playlist is empty".into());
+        return Err("nothing to play".into());
     }
-    player::open(&app, &st.dir, &entries, index.unwrap_or(0).min(entries.len() - 1))
+    let index = index.min(entries.len() - 1);
+    #[cfg(target_os = "macos")]
+    if mpvlib::find_libmpv().is_some() {
+        match open_embedded_macos(app, dir, &entries, index) {
+            Ok(()) => return Ok("embedded".into()),
+            Err(e) => eprintln!("embedded player failed, falling back to an external mpv window: {e}"),
+        }
+    }
+    player::open(app, dir, &entries, index)?;
+    Ok("external".into())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn player_props() -> Value {
+    player::props_snapshot()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn player_set(prop: String, value: Value) -> Result<(), String> {
+    player::set_property(&prop, value)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn player_exec(args: Vec<Value>) -> Result<(), String> {
+    player::exec(&args)
+}
+
+#[tauri::command]
+fn player_recent(st: State<AppState>) -> Vec<companion_core::player::RecentItem> {
+    companion_core::player::RecentStore::load(&st.dir.join("recent.json")).items
+}
+
+#[tauri::command]
+fn player_recent_remove(st: State<AppState>, url: String) {
+    let p = st.dir.join("recent.json");
+    let mut r = companion_core::player::RecentStore::load(&p);
+    r.remove(&url);
+    let _ = r.save(&p);
+}
+
+/// Address of the mpv window currently glued under the player window (0 = none).
+#[cfg(target_os = "macos")]
+static MPV_WINDOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(target_os = "macos")]
+fn on_main<T: Send + 'static>(app: &tauri::AppHandle, f: impl FnOnce(objc2::MainThreadMarker) -> T + Send + 'static) -> Result<T, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        if let Some(mtm) = objc2::MainThreadMarker::new() {
+            let _ = tx.send(f(mtm));
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv_timeout(std::time::Duration::from_secs(5)).map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &[Entry], index: usize) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+    let win = match app.get_webview_window("player") {
+        Some(w) => w,
+        None => {
+            let w = WebviewWindowBuilder::new(app, "player", WebviewUrl::App("player.html".into()))
+                .title("Player")
+                .inner_size(960.0, 540.0)
+                .min_inner_size(480.0, 270.0)
+                .transparent(true)
+                .title_bar_style(TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .build()
+                .map_err(|e| e.to_string())?;
+            let app2 = app.clone();
+            let parent = w.ns_window().map_err(|e| e.to_string())? as usize;
+            w.on_window_event(move |e| match e {
+                WindowEvent::Destroyed => {
+                    MPV_WINDOW.store(0, Ordering::SeqCst);
+                    player::close();
+                }
+                WindowEvent::Resized(_) | WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    let child = MPV_WINDOW.load(Ordering::SeqCst);
+                    if child != 0 {
+                        let _ = on_main(&app2, move |mtm| embed::resync(mtm, parent, child));
+                    }
+                }
+                _ => {}
+            });
+            w
+        }
+    };
+    let parent = win.ns_window().map_err(|e| e.to_string())? as usize;
+    MPV_WINDOW.store(0, Ordering::SeqCst);
+    let known = on_main(app, embed::snapshot)?;
+    player::open_embedded(app, dir, entries, index)?;
+    // mpv creates its window asynchronously; adopt it as soon as it exists.
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..100 {
+            let k = known.clone();
+            if let Ok(Some(child)) = on_main(&app2, move |mtm| embed::adopt(mtm, parent, &k)) {
+                MPV_WINDOW.store(child, Ordering::SeqCst);
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        eprintln!("embedded player: mpv window never appeared");
+    });
+    let _ = win.set_focus();
+    Ok(())
 }
 
 #[cfg(desktop)]
@@ -403,6 +532,30 @@ fn player_close() {
 #[cfg(mobile)]
 #[tauri::command]
 fn player_open(_name: Option<String>, _file: Option<String>, _index: Option<usize>) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_play(_entries: Vec<Entry>, _index: Option<usize>) -> Result<String, String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_props() -> Value {
+    json!({})
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_set(_prop: String, _value: Value) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_exec(_args: Vec<Value>) -> Result<(), String> {
     Err("The built-in player is not available on mobile yet".into())
 }
 
@@ -438,7 +591,8 @@ pub fn run() {
             addons_refresh, addon_url, addons_export, addons_import, addons_seed, addon_configure,
             search, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
             playlist_save, playlist_delete, playlist_export, open_playlist,
-            player_open, player_cmd, player_close, player_keys
+            player_open, player_play, player_cmd, player_close, player_keys,
+            player_props, player_set, player_exec, player_recent, player_recent_remove
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
