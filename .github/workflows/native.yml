@@ -53,7 +53,7 @@ jobs:
       - name: Generate app icons
         run: npx --yes @tauri-apps/cli@2 icon ui/icon.png
       - name: Build app
-        run: npx --yes @tauri-apps/cli@2 build
+        run: npx --yes @tauri-apps/cli@2 build --config '{"bundle":{"createUpdaterArtifacts":false}}'
       - uses: actions/upload-artifact@v4
         with:
           name: companion-${{ matrix.name }}
