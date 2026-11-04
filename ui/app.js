@@ -127,7 +127,28 @@ const App = {
     $$('#themeseg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   },
 
+  /* ---------- UPDATES (desktop only; mobile updates come from the stores) ---------- */
+  async checkUpdate(silent) {
+    const T = window.__TAURI__, msg = $('#upd-msg'); if (!T || !T.updater) return;
+    $('#upd').hidden = false;
+    try {
+      if (!silent) msg.textContent = 'Checking…';
+      const u = await T.updater.check();
+      this.pendingUpdate = u || null;
+      $('#upd-go').hidden = !u;
+      if (!u) { if (!silent) msg.textContent = 'You are on the latest version.'; return; }
+      msg.textContent = 'Version ' + u.version + ' is available.';
+      if (silent) this.toast('Update ' + u.version + ' available. Open Settings > About to install.', 5000);
+    } catch (e) { if (!silent) msg.textContent = 'Could not check for updates.'; }
+  },
+  async installUpdate() {
+    const u = this.pendingUpdate, msg = $('#upd-msg'); if (!u) return;
+    $('#upd-go').disabled = true; msg.textContent = 'Downloading…';
+    try { await u.downloadAndInstall(); msg.textContent = 'Restarting…'; await window.__TAURI__.process.relaunch(); }
+    catch (e) { msg.textContent = 'Update failed. Try again later.'; $('#upd-go').disabled = false; }
+  },
   async init() {
+    document.addEventListener('error', e => { if (e.target && e.target.tagName === 'IMG') e.target.remove(); }, true); // CSP forbids inline onerror
     $('#app').hidden = false;
     let th = 'auto'; try { th = localStorage.getItem('theme') || 'auto'; } catch (e) {}
     this.setTheme(th);
@@ -168,6 +189,8 @@ const App = {
     $('#bcat').onchange = () => this.browse(false);
     $('#bmore').onclick = () => this.browse(true);
     this.loadCatalogs();
+    $('#upd-check').onclick = () => this.checkUpdate(false); $('#upd-go').onclick = () => this.installUpdate();
+    setTimeout(() => this.checkUpdate(true), 4000);
     $('#qgo').onclick = () => this.search();
     $('#q').onkeydown = e => { if (e.key === 'Enter') this.search(); };
     $('#imdb').onkeydown = e => { if (e.key === 'Enter') this.fetchStreams(); };
@@ -220,13 +243,13 @@ const App = {
   showHits(list, append) {
     if (append) { this.hitsList = (this.hitsList || []).concat(list); list = this.hitsList; } else this.hitsList = list;
     $('#hits').innerHTML = list.map((h, i) => `<button class="hit" data-i="${i}" style="--i:${i};--h:${hue(h.name)}">
-      <div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img loading="lazy" src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
+      <div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img loading="lazy" src="${esc(h.poster)}" alt="">` : ''}</div>
       <div class="hit-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div></button>`).join('')
       || stateBox('search', 'No matches', 'Try another spelling, or paste the IMDb id directly.');
     $$('#hits .hit').forEach(el => el.onclick = () => {
       const h = list[+el.dataset.i]; this.title = h; $('#imdb').value = h.id;
       $('#plname').value = h.name;
-      $('#hits').innerHTML = `<div class="picked" style="--h:${hue(h.name)}"><div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
+      $('#hits').innerHTML = `<div class="picked" style="--h:${hue(h.name)}"><div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img src="${esc(h.poster)}" alt="">` : ''}</div>
         <div class="pk-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div><span class="check">${ic('check')}</span></div>`;
     });
   },
@@ -559,7 +582,7 @@ const App = {
       return `<div class="card ad ${a.enabled ? '' : 'off'}" data-id="${esc(a.id)}" style="--i:${i};--h:${hue(a.name)}">
       <span class="ad-rank">#${i + 1}</span>
       <div class="ad-main">
-       <div class="ad-logo">${esc(initial(a.name))}${a.logo ? `<img src="${esc(a.logo)}" alt="" onerror="this.remove()">` : ''}</div>
+       <div class="ad-logo">${esc(initial(a.name))}${a.logo ? `<img src="${esc(a.logo)}" alt="">` : ''}</div>
        <div class="ad-info"><div class="ad-name">${esc(a.name)} <small>v${esc(a.version)}</small></div>
         <div class="ad-desc">${esc(a.description)}</div>
         <div class="badges">${st}${a.resources.map(r => `<span class="b">${esc(r)}</span>`).join('')}${a.types.map(t => `<span class="b">${esc(t)}</span>`).join('')}<span class="b">${ic('clock')}${a.timeout_secs}s</span></div>

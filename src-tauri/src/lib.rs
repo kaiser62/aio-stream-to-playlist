@@ -1,4 +1,5 @@
 mod applog;
+mod vault;
 mod shaders;
 #[cfg(desktop)]
 mod mpvlib;
@@ -31,12 +32,18 @@ struct AppState {
     cfg: Mutex<Config>,
     jobs: Arc<Mutex<HashMap<String, Job>>>,
     client: reqwest::Client,
+    data_key: Option<config::DataKey>,
+    /// config.json is encrypted but the keychain key is unavailable: never overwrite it.
+    locked: bool,
 }
 
 impl AppState {
     fn save(&self) -> Result<(), String> {
+        if self.locked {
+            return Err("Secure storage is unavailable, so settings are read-only. Unlock your keychain and restart.".into());
+        }
         let c = self.cfg.lock().unwrap();
-        config::save(&self.dir.join("config.json"), &c).map_err(|e| e.to_string())
+        config::save_with(&self.dir.join("config.json"), &c, self.data_key.as_ref()).map_err(|e| e.to_string())
     }
     fn playlists(&self) -> PathBuf {
         self.dir.join("playlists")
@@ -480,7 +487,7 @@ fn player_filter(_preset: String) -> Result<(), String> {
 /// Frame-rate target (0 = off, else 60/90/120) via FFmpeg `minterpolate`; `mode` is "blend" (cheap) or "mci" (motion-compensated, heavy CPU).
 #[cfg(desktop)]
 #[tauri::command]
-fn player_fps(target: u32, mode: String) -> Result<(), String> {
+fn player_fps(target: u32, mode: String, height: Option<u32>) -> Result<(), String> {
     crate::alog!("info", "frame-rate target: {target} ({mode})");
     if !matches!(target, 0 | 30 | 48 | 60 | 90 | 120) {
         return Err("unsupported frame rate".into());
@@ -493,7 +500,9 @@ fn player_fps(target: u32, mode: String) -> Result<(), String> {
             "blend" => "mi_mode=blend",
             _ => return Err("unknown mode".into()),
         };
-        format!("lavfi=[minterpolate=fps={target}:{mi}]")
+        // Motion-compensated interpolation is far too heavy above 1080p: scale the input down first.
+        let cap = if mode == "mci" && height.unwrap_or(0) > 1080 { "scale=-2:1080," } else { "" };
+        format!("lavfi=[{cap}minterpolate=fps={target}:{mi}]")
     };
     // Software filters need frames in system memory: use a copy-back decoder while one is active.
     player::set_raw_property("hwdec", Value::String(if target == 0 { "auto-safe" } else { "auto-copy-safe" }.into()))?;
@@ -502,7 +511,7 @@ fn player_fps(target: u32, mode: String) -> Result<(), String> {
 
 #[cfg(mobile)]
 #[tauri::command]
-fn player_fps(_target: u32, _mode: String) -> Result<(), String> {
+fn player_fps(_target: u32, _mode: String, _height: Option<u32>) -> Result<(), String> {
     Err("The built-in player is not available on mobile yet".into())
 }
 
@@ -695,13 +704,25 @@ fn player_keys() -> Vec<KeyInfo> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    builder
         .setup(|app| {
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            let cfg = config::load(&dir.join("config.json"));
-            app.manage(AppState { dir, cfg: Mutex::new(cfg), jobs: Arc::new(Mutex::new(HashMap::new())), client: addons::http_client() });
+            let path = dir.join("config.json");
+            let was_encrypted = config::is_encrypted(&path);
+            let data_key = vault::data_key(!was_encrypted);
+            let locked = was_encrypted && data_key.is_none();
+            let cfg = config::load_with(&path, data_key.as_ref());
+            let st = AppState { dir, cfg: Mutex::new(cfg), jobs: Arc::new(Mutex::new(HashMap::new())), client: addons::http_client(), data_key, locked };
+            if st.data_key.is_some() && !was_encrypted {
+                let _ = st.save(); // migrate an old plain-text config to the encrypted form
+            }
+            app.manage(st);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

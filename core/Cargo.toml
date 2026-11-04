@@ -17,6 +17,9 @@ futures = "0.3"
 tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart"] }
 
+chacha20poly1305 = "0.10"
+getrandom = "0.2"
+
 [dev-dependencies]
 wiremock = "0.6"
 tempfile = "3"

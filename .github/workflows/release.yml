@@ -1,0 +1,60 @@
+name: release
+
+# Every push to main that touches the app publishes a signed release; installed desktop apps pick it up
+# through the in-app updater (latest.json). Version is 0.1.<run number>, patched in CI only.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md", "legacy/**", ".agent/**", ".claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: { group: release, cancel-in-progress: false }
+
+jobs:
+  publish:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest,   name: macos-arm64, args: "--target aarch64-apple-darwin", target: aarch64-apple-darwin }
+          - { os: macos-latest,   name: macos-x64,   args: "--target x86_64-apple-darwin",  target: x86_64-apple-darwin }
+          - { os: windows-latest, name: windows,     args: "", target: "" }
+          - { os: ubuntu-22.04,   name: linux,       args: "", target: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Linux system libraries
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev build-essential file
+      - name: Set version from run number
+        shell: bash
+        run: |
+          V="0.1.${{ github.run_number }}"
+          node -e "const f='src-tauri/tauri.conf.json',j=require('./'+f);j.version='$V';require('fs').writeFileSync(f,JSON.stringify(j,null,2))"
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+      - name: Generate app icons
+        run: npx --yes @tauri-apps/cli@2 icon ui/icon.png
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v${{ env.VERSION }}
+          releaseName: "Companion v${{ env.VERSION }}"
+          releaseBody: "Automatic build of the latest changes on main."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

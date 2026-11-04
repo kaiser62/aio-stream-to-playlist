@@ -37,9 +37,9 @@ impl TorBox {
         if self.key.is_empty() {
             return Err("Set your TorBox API key in Settings first.".into());
         }
-        let resp = req.bearer_auth(&self.key).send().await.map_err(|e| format!("Network error: {e}"))?;
+        let resp = req.bearer_auth(&self.key).send().await.map_err(|e| format!("Network error: {}", e.without_url()))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("Network error: {e}"))?;
+        let text = resp.text().await.map_err(|e| format!("Network error: {}", e.without_url()))?;
         if !status.is_success() {
             return Err(format!("TorBox HTTP {}: {}", status.as_u16(), text.chars().take(300).collect::<String>()));
         }

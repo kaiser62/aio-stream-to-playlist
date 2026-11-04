@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schema/desktop-schema.json",
+  "identifier": "desktop-updater",
+  "description": "Self-update (desktop only; mobile updates come from the stores)",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "macOS",
+    "windows",
+    "linux"
+  ],
+  "permissions": [
+    "updater:default",
+    "process:allow-restart"
+  ]
+}
