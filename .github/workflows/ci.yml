@@ -1,0 +1,76 @@
+name: build-and-test
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.py }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        py: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.py }}" }
+      - name: Unit + end-to-end tests (fake AIOStreams/TorBox)
+        run: python -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Front-end syntax check
+        run: node --check static/app.js && node --check static/sw.js
+
+  build:
+    name: build (${{ matrix.os }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  name: linux }
+          - { os: macos-latest,   name: macos }
+          - { os: windows-latest, name: windows }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install pyinstaller
+      - name: Build standalone app
+        shell: bash
+        run: |
+          SEP=":"; [ "${{ matrix.name }}" = "windows" ] && SEP=";"
+          pyinstaller --onefile --name stream-playlist --add-data "static${SEP}static" app.py
+      - name: Smoke-test the built binary
+        shell: bash
+        run: |
+          EXE=dist/stream-playlist; [ "${{ matrix.name }}" = "windows" ] && EXE=dist/stream-playlist.exe
+          DATA_DIR="$RUNNER_TEMP/smoke" PORT=8799 "$EXE" &
+          PID=$!
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8799/api/status && break; sleep 1; done
+          curl -fs http://127.0.0.1:8799/ | grep -q "Stream Playlist"
+          curl -fs http://127.0.0.1:8799/app.js | grep -q "use strict"
+          kill $PID || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stream-playlist-${{ matrix.name }}
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out }
+      - run: cd out && for d in */; do (cd "$d" && zip -r "../${d%/}.zip" .); done
+      - uses: softprops/action-gh-release@v2
+        with: { files: out/*.zip }

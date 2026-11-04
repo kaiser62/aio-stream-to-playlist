@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stream Playlist">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon.svg">
+<link rel="stylesheet" href="/app.css">
+<title>Stream Playlist</title>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+ <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+ <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9.5 4.3 4.3 0 0 1 17.5 18z"/></symbol>
+ <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 4v16l14-8z"/></symbol>
+ <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+</svg>
+
+<div id="login" class="login" hidden>
+ <form class="card" onsubmit="App.login(event)">
+  <h2>Enter PIN</h2>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" autofocus>
+  <button class="btn primary" type="submit">Unlock</button>
+  <p id="loginerr" class="bad"></p>
+ </form>
+</div>
+
+<div id="app" class="shell" hidden>
+ <nav class="nav" id="nav">
+  <div class="brand"><img src="/icon.svg" alt="" width="28" height="28"><span>Stream&nbsp;Playlist</span></div>
+  <button data-v="find" class="on"><svg><use href="#i-search"/></svg><span>Find</span></button>
+  <button data-v="results"><svg><use href="#i-list"/></svg><span>Results</span><b id="rcount" hidden></b></button>
+  <button data-v="library"><svg><use href="#i-cloud"/></svg><span>TorBox</span></button>
+  <button data-v="playlists"><svg><use href="#i-play"/></svg><span>Playlists</span></button>
+  <button data-v="settings"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
+ </nav>
+
+ <main>
+  <!-- FIND -->
+  <section id="v-find">
+   <h1>Find a title</h1>
+   <div class="card">
+    <div class="seg" id="kindseg"><button data-k="movie" class="on">Movie</button><button data-k="series">Series</button></div>
+    <div class="row">
+     <input id="q" class="grow" type="search" placeholder="Search title…" enterkeyhint="search">
+     <button class="btn primary" id="qgo">Search</button>
+    </div>
+    <div class="row"><input id="imdb" placeholder="or IMDb id (tt1234567)" autocapitalize="off" autocorrect="off"></div>
+    <div id="hits" class="hits"></div>
+   </div>
+   <div class="card" id="epcard" hidden>
+    <div class="grid3">
+     <label>Season<input id="season" type="number" min="0" value="1" inputmode="numeric"></label>
+     <label>From ep<input id="ep1" type="number" min="1" value="1" inputmode="numeric"></label>
+     <label>To ep<input id="ep2" type="number" min="1" value="1" inputmode="numeric"></label>
+    </div>
+   </div>
+   <div class="row"><button class="btn primary wide" id="fetchgo">Fetch streams</button></div>
+   <p id="fstatus" class="mut"></p>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="v-results" hidden>
+   <div class="head"><h1>Results</h1>
+    <div class="row">
+     <select id="sort">
+      <option value="best">Best match</option><option value="res">Resolution</option>
+      <option value="size">Size ↓</option><option value="sizeasc">Size ↑</option>
+      <option value="seeds">Seeders</option>
+     </select>
+     <button class="btn" id="fbtn">Filters <b id="fcount" hidden></b></button>
+    </div>
+   </div>
+   <div id="filters" class="card" hidden>
+    <div class="grid2">
+     <label>Min resolution<select id="f-res"><option value="0">Any</option><option value="480">480p</option><option value="720">720p</option><option value="1080" selected>1080p</option><option value="2160">4K</option></select></label>
+     <label>Max size (GB, 0 = none)<input id="f-max" type="number" min="0" step="0.5" value="0"></label>
+     <label>Min size (GB)<input id="f-min" type="number" min="0" step="0.5" value="0"></label>
+     <label>Min seeders<input id="f-seeds" type="number" min="0" value="0"></label>
+    </div>
+    <div class="chips" id="c-codec"><span class="lbl">Codec</span></div>
+    <div class="chips" id="c-hdr"><span class="lbl">HDR</span></div>
+    <div class="chips" id="c-audio"><span class="lbl">Audio</span></div>
+    <div class="chips" id="c-quality"><span class="lbl">Source</span></div>
+    <div class="grid2">
+     <label>Exclude words (comma)<input id="f-ex" value="cam,telesync,hdts"></label>
+     <label>Must include<input id="f-in" placeholder="e.g. x265"></label>
+    </div>
+    <label class="chk"><input id="f-cached" type="checkbox" checked> Cached on debrid only</label>
+    <label class="chk"><input id="f-best" type="checkbox" checked> Best 1 per episode</label>
+    <div class="row"><button class="btn" id="freset">Reset</button></div>
+   </div>
+   <p id="rstatus" class="mut"></p>
+   <div id="rlist" class="list"></div>
+   <div id="sendbar" class="sendbar" hidden>
+    <div class="sb-top">
+     <span id="selinfo"></span>
+     <button class="lnk" id="selall">All</button><button class="lnk" id="selnone">None</button>
+    </div>
+    <div class="row">
+     <input id="plname" class="grow" placeholder="Playlist name" value="playlist">
+     <button class="btn primary" id="sendgo">Send to TorBox</button>
+    </div>
+    <div class="row sm">
+     <label class="chk"><input id="o-append" type="checkbox"> Append to existing playlist</label>
+     <label class="chk"><input id="o-addonly" type="checkbox"> Only add to TorBox (no playlist)</label>
+    </div>
+   </div>
+   <div id="job"></div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section id="v-library" hidden>
+   <div class="head"><h1>TorBox library</h1><button class="btn" id="libreload">Refresh</button></div>
+   <p class="mut">Everything already on your TorBox account. Pick items to turn into a playlist (all video files in each).</p>
+   <input id="libq" type="search" placeholder="Filter…">
+   <div id="liblist" class="list"></div>
+   <div class="row sticky"><input id="libname" class="grow" placeholder="Playlist name" value="torbox"><button class="btn primary" id="libgo">Build playlist</button></div>
+   <div id="libjob"></div>
+  </section>
+
+  <!-- PLAYLISTS -->
+  <section id="v-playlists" hidden>
+   <div class="head"><h1>Playlists</h1></div>
+   <div id="pllist" class="list"></div>
+   <div id="pledit" class="card" hidden></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="v-settings" hidden>
+   <h1>Settings</h1>
+   <div class="card">
+    <label>AIOStreams manifest URL<input id="s-manifest" autocapitalize="off" autocorrect="off" placeholder="https://…/manifest.json"></label>
+    <label>TorBox API key<input id="s-key" type="password" placeholder="leave blank to keep saved key" autocomplete="off"></label>
+    <label>Access PIN (needed to use this from other devices)<input id="s-pin" type="password" inputmode="numeric" placeholder="leave blank to keep" autocomplete="new-password"></label>
+    <div class="row"><button class="btn primary" id="s-save">Save</button><button class="btn" id="s-clearpin">Remove PIN</button><span id="s-msg" class="mut"></span></div>
+   </div>
+   <div class="card">
+    <h3>Use on iPad, iPhone, Android, Windows</h3>
+    <p>Start the server with <code>HOST=0.0.0.0 python3 app.py</code> (needs a PIN set above), then open <code>http://&lt;this-computer-ip&gt;:8790</code> on the other device and use <em>Add to Home Screen</em> / <em>Install app</em>.</p>
+    <p class="mut" id="s-here"></p>
+   </div>
+  </section>
+ </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>
