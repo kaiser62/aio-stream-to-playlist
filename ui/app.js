@@ -23,6 +23,8 @@ const App = {
         if (body === undefined) return await invoke('config_get');
         await invoke('config_set', {torboxKey: body.torbox_key || null}); return {ok: true};
       }
+      if (p === '/api/catalogs') return await invoke('catalogs', {kind: body.kind});
+      if (p === '/api/browse') return {results: await invoke('browse', {addonId: body.addon_id, kind: body.kind, catalog: body.catalog, skip: body.skip || 0})};
       if (p === '/api/search') return {results: await invoke('search', {kind: body.kind, query: body.query})};
       if (p === '/api/fetch') return await invoke('fetch_streams', {kind: body.kind, imdb: body.imdb, season: body.season, ep1: body.ep1, ep2: body.ep2});
       if (p === '/api/send') return await invoke('send', {items: body.items, name: body.name, append: !!body.append});
@@ -92,7 +94,7 @@ const App = {
     $('.shell').classList.remove('nav-open'); $('#railtog').setAttribute('aria-expanded', 'false');
     $('#v-results').classList.remove('fopen-m');
     try { history.replaceState(null, '', location.search + '#' + v); } catch (e) {}
-    if (v === 'find') this.refreshKeyBanner();
+    if (v === 'find') { this.refreshKeyBanner(); this.loadCatalogs(); }
     if (v === 'library') this.loadLibrary();
     if (v === 'addons') this.loadAddons();
     if (v === 'playlists') this.loadPlaylists();
@@ -161,8 +163,11 @@ const App = {
       this.kind = b.dataset.k;
       $$('#kindseg button').forEach(x => x.classList.toggle('on', x === b));
       $('#epcard').hidden = this.kind !== 'series';
-      this.renderHitsEmpty(); this.title = null;
+      this.renderHitsEmpty(); this.title = null; this.loadCatalogs();
     });
+    $('#bcat').onchange = () => this.browse(false);
+    $('#bmore').onclick = () => this.browse(true);
+    this.loadCatalogs();
     $('#qgo').onclick = () => this.search();
     $('#q').onkeydown = e => { if (e.key === 'Enter') this.search(); };
     $('#imdb').onkeydown = e => { if (e.key === 'Enter') this.fetchStreams(); };
@@ -210,16 +215,35 @@ const App = {
     $('#hits').innerHTML = skeleton(6, 'sk-hit');
     const r = await this.api('/api/search', {query: q, kind: this.kind});
     if (r.error) return $('#hits').innerHTML = stateBox('alert', 'Search failed', r.error, {err: true});
-    $('#hits').innerHTML = r.results.map((h, i) => `<button class="hit" data-i="${i}" style="--i:${i};--h:${hue(h.name)}">
+    this.showHits(r.results);
+  },
+  showHits(list, append) {
+    if (append) { this.hitsList = (this.hitsList || []).concat(list); list = this.hitsList; } else this.hitsList = list;
+    $('#hits').innerHTML = list.map((h, i) => `<button class="hit" data-i="${i}" style="--i:${i};--h:${hue(h.name)}">
       <div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img loading="lazy" src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
       <div class="hit-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div></button>`).join('')
       || stateBox('search', 'No matches', 'Try another spelling, or paste the IMDb id directly.');
     $$('#hits .hit').forEach(el => el.onclick = () => {
-      const h = r.results[+el.dataset.i]; this.title = h; $('#imdb').value = h.id;
+      const h = list[+el.dataset.i]; this.title = h; $('#imdb').value = h.id;
       $('#plname').value = h.name;
       $('#hits').innerHTML = `<div class="picked" style="--h:${hue(h.name)}"><div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
         <div class="pk-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div><span class="check">${ic('check')}</span></div>`;
     });
+  },
+  async loadCatalogs() {
+    const r = await this.api('/api/catalogs', {kind: this.kind}), sel = $('#bcat');
+    this.cats = Array.isArray(r) ? r : [];
+    $('#browsebar').hidden = !this.cats.length; $('#bmore').hidden = true;
+    sel.innerHTML = '<option value="">Browse a catalog…</option>' + this.cats.map((c, i) => `<option value="${i}">${esc(c.name)} · ${esc(c.addon_name)}</option>`).join('');
+  },
+  async browse(more) {
+    const c = this.cats[+$('#bcat').value]; if (!c) { $('#bmore').hidden = true; return; }
+    if (!more) { this.bskip = 0; $('#hits').innerHTML = skeleton(6, 'sk-hit'); }
+    const r = await this.api('/api/browse', {addon_id: c.addon_id, kind: this.kind, catalog: c.id, skip: this.bskip});
+    if (r.error) return $('#hits').innerHTML = stateBox('alert', 'Could not load catalog', r.error, {err: true});
+    this.bskip += (r.results || []).length || 0;
+    this.showHits(r.results, more);
+    $('#bmore').hidden = !r.results.length;
   },
   async fetchStreams() {
     const id = $('#imdb').value.trim(), st = $('#fstatus');

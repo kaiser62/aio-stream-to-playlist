@@ -283,16 +283,55 @@ pub async fn search(client: &reqwest::Client, addons: &[Addon], kind: &str, quer
             if id.is_empty() || !seen.insert(id.clone()) {
                 continue;
             }
-            out.push(json!({
-                "id": id,
-                "name": m.get("name").and_then(Value::as_str).unwrap_or(""),
-                "year": m.get("releaseInfo").or_else(|| m.get("year")).and_then(Value::as_str).unwrap_or(""),
-                "poster": m.get("poster").and_then(Value::as_str),
-            }));
+            out.push(hit_of(&m, id));
         }
     }
     out.truncate(12);
     out
+}
+
+fn hit_of(m: &Value, id: String) -> Value {
+    json!({
+        "id": id,
+        "name": m.get("name").and_then(Value::as_str).unwrap_or(""),
+        "year": m.get("releaseInfo").or_else(|| m.get("year")).and_then(Value::as_str).unwrap_or(""),
+        "poster": m.get("poster").and_then(Value::as_str),
+    })
+}
+
+/// Browsable catalogs (no required extra such as a mandatory search/genre) of enabled addons for a type.
+pub fn catalogs(addons: &[Addon], kind: &str) -> Vec<Value> {
+    let required = |c: &Value| {
+        ["extra", "extraSupported"].iter().any(|k| {
+            c.get(*k).and_then(Value::as_array).map(|a| a.iter().any(|x| x.get("isRequired").and_then(Value::as_bool) == Some(true))).unwrap_or(false)
+        })
+    };
+    let mut out = Vec::new();
+    for a in addons.iter().filter(|a| a.enabled) {
+        for c in a.manifest.catalogs.iter().filter(|c| c.get("type").and_then(Value::as_str) == Some(kind) && !required(c)) {
+            let Some(cid) = c.get("id").and_then(Value::as_str) else { continue };
+            let name = c.get("name").and_then(Value::as_str).unwrap_or(cid);
+            out.push(json!({"addon_id": a.id, "addon_name": a.name, "id": cid, "name": name}));
+        }
+    }
+    out
+}
+
+/// One page of a catalog (`/catalog/{kind}/{id}[/skip=N].json`). Only IMDb-id items are kept, since streams are fetched by IMDb id.
+pub async fn browse(client: &reqwest::Client, addons: &[Addon], addon_id: &str, kind: &str, cat_id: &str, skip: u32) -> Result<Vec<Value>, String> {
+    let a = addons.iter().find(|a| a.id == addon_id && a.enabled).ok_or("Addon not found or disabled")?;
+    let base = base_of(&a.url);
+    let url = if skip > 0 {
+        format!("{}/catalog/{}/{}/skip={}.json", base, kind, urlencoding::encode(cat_id), skip)
+    } else {
+        format!("{}/catalog/{}/{}.json", base, kind, urlencoding::encode(cat_id))
+    };
+    let r = client.get(&url).timeout(Duration::from_secs(a.timeout_secs)).send().await.map_err(|_| "Could not reach the addon".to_string())?;
+    let v = r.json::<Value>().await.map_err(|_| "The addon returned an unreadable catalog".to_string())?;
+    Ok(v.get("metas").and_then(Value::as_array).cloned().unwrap_or_default().iter().filter_map(|m| {
+        let id = m.get("imdb_id").or_else(|| m.get("id")).and_then(Value::as_str)?.to_string();
+        id.starts_with("tt").then(|| hit_of(m, id))
+    }).collect())
 }
 
 /// Fetch full metadata (`/meta/{kind}/{id}.json`) from the first enabled addon that serves it.
@@ -321,6 +360,19 @@ mod tests {
         assert!(normalize_manifest_url("ftp://x").is_err());
         assert_eq!(base_of("https://h.com/a/b/manifest.json?x=1"), "https://h.com/a/b");
         assert_eq!(masked("https://h.com/secret/manifest.json"), "https://h.com/…");
+    }
+
+    #[test]
+    fn catalogs_skip_required_extras_and_disabled_addons() {
+        let m = manifest_from_value(&json!({"id":"a","name":"A","resources":["catalog"],"types":["movie"],"catalogs":[
+            {"type":"movie","id":"top","name":"Top"},
+            {"type":"movie","id":"genre","name":"By genre","extra":[{"name":"genre","isRequired":true}]},
+            {"type":"series","id":"s","name":"Shows"}]})).unwrap();
+        let mk = |enabled| Addon { id: "x".into(), url: "https://h/manifest.json".into(), name: "A".into(), enabled, timeout_secs: 5, manifest: m.clone(), last_ok: None, last_error: None, latency_ms: None };
+        let c = catalogs(&[mk(true)], "movie");
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0]["id"], "top");
+        assert!(catalogs(&[mk(false)], "movie").is_empty());
     }
 
     #[test]

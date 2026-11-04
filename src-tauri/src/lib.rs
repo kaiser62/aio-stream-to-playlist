@@ -254,6 +254,16 @@ async fn search(st: State<'_, AppState>, kind: String, query: String) -> Result<
     Ok(addons::search(&st.client, &list, &kind, &query).await)
 }
 
+#[tauri::command]
+fn catalogs(st: State<AppState>, kind: String) -> Vec<Value> {
+    addons::catalogs(&st.addons(), &kind)
+}
+
+#[tauri::command]
+async fn browse(st: State<'_, AppState>, addon_id: String, kind: String, catalog: String, skip: Option<u32>) -> Result<Vec<Value>, String> {
+    addons::browse(&st.client, &st.addons(), &addon_id, &kind, &catalog, skip.unwrap_or(0)).await
+}
+
 /// Poster/summary/episode info for the Watching tab. Uses the user's enabled metadata addons (Cinemeta by default).
 #[tauri::command]
 async fn title_meta(st: State<'_, AppState>, name: String, series: bool, season: Option<u32>, episode: Option<u32>) -> Result<Value, String> {
@@ -697,7 +707,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config_get, config_set, addons_list, addons_add, addons_update, addons_remove, addons_reorder,
             addons_refresh, addon_url, addons_export, addons_import, addons_seed, addon_configure,
-            search, title_meta, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
+            search, catalogs, browse, title_meta, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
             playlist_save, playlist_delete, playlist_export, open_playlist,
             player_open, player_play, player_cmd, player_close, player_keys,
             player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect, player_filter, player_fps, window_fullscreen, logs_get, logs_clear, log_push

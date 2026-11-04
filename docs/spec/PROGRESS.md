@@ -62,3 +62,7 @@ Legend: DONE = built and verified by running it. DOING = in flight. UNVERIFIED =
 ### Dock slimmed (2026-11-04)
 - Frame settings dock: small "Frame" button + inline text summary, no card/border/opaque background (panel is transparent). Dock height follows content (`dock-h` message from the panel, capped 330px); the video stage takes the rest. Dropdown grid only renders when expanded.
 - Seen live (collapsed state, Metal, 4K clip). UNVERIFIED: expanded dropdown state after this change, ghost-render of the transparent panel over the native video, phone widths.
+
+### Browse addon catalogs (2026-11-04)
+- Find tab has a "Browse a catalog..." dropdown listing every catalog (no required extra) of enabled addons for the current Movie/Series type, with "Load more" paging (`skip=N`). Results reuse the search hit list, so picking a title fills the IMDb id as before. Only IMDb (`tt`) items are shown since streams are fetched by IMDb id.
+- Rust: `addons::catalogs`, `addons::browse`, Tauri commands `catalogs` and `browse`; unit test for catalog filtering. UNVERIFIED live against a real addon (user's catalog-style addon not yet tried in-app).
