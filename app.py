@@ -13,6 +13,18 @@ FROZEN = bool(getattr(sys, "frozen", False))  # PyInstaller build
 BUNDLE = getattr(sys, "_MEIPASS", HERE)
 DATA_DIR = os.environ.get("DATA_DIR") or (os.path.expanduser("~/.aio-stream-to-playlist") if FROZEN else HERE)
 os.makedirs(DATA_DIR, exist_ok=True)
+DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes", "on")
+
+
+def redact(text):
+    """Hide secrets (TorBox token, PIN token, keys) from log lines."""
+    return re.sub(r"(?i)\b(token|k|key|pin|api_key)=[^&\s\"']+", r"\1=***", str(text))
+
+
+def dbg(*a):
+    if DEBUG:
+        print(time.strftime("%H:%M:%S"), "[debug]", redact(" ".join(str(x) for x in a)), flush=True)
+
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 PLAYLIST_DIR = os.path.join(DATA_DIR, "playlists")
 TORBOX = os.environ.get("TORBOX_API", "https://api.torbox.app/v1/api")
@@ -49,13 +61,18 @@ def save_config(cfg):
 def http(url, method="GET", headers=None, data=None, timeout=45):
     req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
     req.add_header("User-Agent", "aio-stream-to-playlist/1.0")
+    t0 = time.time()
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+            raw = r.read()
+            dbg(f"upstream {method} {url} -> {r.status} {len(raw)}B {int((time.time() - t0) * 1000)}ms")
+            return json.loads(raw.decode("utf-8", "replace") or "{}")
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", "replace")[:300]
+        dbg(f"upstream {method} {url} -> HTTP {e.code} {body}")
         raise RuntimeError(f"HTTP {e.code} from {urllib.parse.urlparse(url).netloc}: {body}")
     except urllib.error.URLError as e:
+        dbg(f"upstream {method} {url} -> network error {e.reason}")
         raise RuntimeError(f"Network error: {e.reason}")
 
 
@@ -353,6 +370,7 @@ def run_send_job(job_id, cfg, items, name, append=False):
                 row["state"] = "done"
         except Exception as e:
             row["state"], row["detail"] = "error", str(e)
+            dbg(f"job {job_id} item {it.get('title')!r} failed: {e}")
     if entries:
         fn = safe_name(name) + ".m3u8"
         write_playlist(fn, entries)
@@ -378,8 +396,9 @@ def token_for(pin):
 
 # ---------------------------------------------------------------- server
 class H(BaseHTTPRequestHandler):
-    def log_message(self, *a):
-        pass
+    def log_message(self, fmt, *args):
+        if DEBUG:
+            dbg(f"{self.client_address[0]} {fmt % args}")
 
     def _send(self, code, body, ctype="application/json", extra=None):
         b = body if isinstance(body, bytes) else body.encode()
@@ -506,6 +525,9 @@ class H(BaseHTTPRequestHandler):
                 subprocess.Popen(["open", "-a", app, path])
                 return self._json({"ok": True})
         except Exception as e:
+            if DEBUG:
+                import traceback
+                dbg(f"error in POST {p}:\n{traceback.format_exc()}")
             return self._json({"error": str(e)})
         self._json({"error": "not found"}, 404)
 
@@ -534,7 +556,12 @@ def main():
         sys.exit("Refusing to listen on the network without a PIN (your TorBox links would be open to the LAN).\n"
                  "Run once on localhost, set a PIN in Settings, then restart with HOST=0.0.0.0.")
     srv = ThreadingHTTPServer((host, port), H)
-    print(f"Open http://127.0.0.1:{port}" + (f"  (LAN: http://<this-computer-ip>:{port})" if host == "0.0.0.0" else ""))
+    if DEBUG:
+        dbg(f"python {sys.version.split()[0]} frozen={FROZEN} data_dir={DATA_DIR} static={STATIC_DIR} "
+            f"static_ok={os.path.isdir(STATIC_DIR)} host={host} port={port}")
+        c = load_config()
+        dbg(f"config: manifest={'set' if c.get('manifest_url') else 'missing'} torbox_key={'set' if c.get('torbox_api_key') else 'missing'} has_pin={'yes' if c.get('pin') else 'no'}")
+    print(f"Open http://127.0.0.1:{port}" + (f"  (LAN: http://<this-computer-ip>:{port})" if host == "0.0.0.0" else ""), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
