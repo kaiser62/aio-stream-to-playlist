@@ -44,13 +44,14 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--sans);letter-spacing:.005em;
+html::before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;background:var(--bg);clip-path:var(--hole,none)}
+body{margin:0;background:transparent;color:var(--fg);font:15px/1.5 var(--sans);letter-spacing:.005em;
   -webkit-font-smoothing:antialiased;min-height:100dvh;overflow-x:hidden}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   background:radial-gradient(70% 45% at 8% -5%,var(--glow),transparent 70%),
   url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .45  0 0 0 0 .4  0 0 0 .55 0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='.6'/></svg>");
-  background-blend-mode:normal;opacity:1}
-body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bg);opacity:calc(1 - var(--grain) * 8)}
+  background-blend-mode:normal;opacity:1;clip-path:var(--hole,none)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bg);opacity:calc(1 - var(--grain) * 8);clip-path:var(--hole,none)}
 h1,h2,h3,p{margin:0}
 code{font:12.5px var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:6px;border:1px solid var(--line)}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -467,3 +468,6 @@ input:disabled+.cbx{opacity:.35}
 .keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px 24px}
 .krow{display:flex;gap:12px;align-items:center;font-size:13.5px}
 .krow kbd{min-width:74px;text-align:center;font:12px var(--mono);padding:3px 8px;border-radius:7px;background:var(--line);border:1px solid var(--line-2)}
+#pstage{position:relative;width:100%;aspect-ratio:16/9;max-height:64vh;margin:0 0 16px;border-radius:0;overflow:hidden;background:transparent}
+#pframe{display:block;width:100%;height:100%;border:0;background:transparent;color-scheme:dark}
+#pstage.pfs{position:fixed;inset:0;z-index:1000;max-height:none;aspect-ratio:auto;margin:0}

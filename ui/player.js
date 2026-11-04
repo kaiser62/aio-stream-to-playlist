@@ -4,7 +4,9 @@
 (() => {
   'use strict';
   const MOCK = new URLSearchParams(location.search).has('mock');
-  const T = window.__TAURI__;
+  const EMBED = new URLSearchParams(location.search).has('embed');
+  if (EMBED) document.documentElement.classList.add('embed');
+  const T = window.__TAURI__ || (EMBED && window.parent && window.parent.__TAURI__) || undefined;
   const $ = (s, r = document) => r.querySelector(s);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -41,7 +43,7 @@
   const exec = (...args) => invoke('player_exec', { args }).catch(() => {});
   const setProp = (prop, value) => invoke('player_set', { prop, value }).catch(() => {});
   const cmd = (name, arg) => invoke('player_cmd', { cmd: name, arg: arg == null ? null : arg }).catch(() => {});
-  const win = () => (T && T.window && T.window.getCurrentWindow ? T.window.getCurrentWindow() : null);
+  const win = () => (!EMBED && T && T.window && T.window.getCurrentWindow ? T.window.getCurrentWindow() : null);
 
   // ------------------------------------------------------------------ formatting
   function fmt(t, force) {
@@ -197,6 +199,7 @@
       case 'demuxer-cache-time': case 'paused-for-cache': renderBuffer(); break;
       case 'volume': case 'mute': renderVolume(); if (ready && !fromSnapshot && old !== v && !$('#vol').classList.contains('drag')) osdVolume(); break;
       case 'speed': renderSpeed(); if (ready && !fromSnapshot && old !== v) osd('speed', (Math.round(v * 100) / 100) + 'x', { icon: 'speed', sub: 'Speed' }); break;
+      case 'path': document.body.classList.toggle('video-on', !!v); document.body.classList.toggle('idle', !v); break;
       case 'media-title': case 'filename': renderTitle(); break;
       case 'chapter-list': renderTicks(); renderSidebar(); break;
       case 'ab-loop-a': case 'ab-loop-b': renderLoop(); if (ready && !fromSnapshot && name === 'ab-loop-a' && typeof v === 'number') osd('ab', 'A–B loop: ' + (typeof P['ab-loop-b'] === 'number' ? 'on' : 'A set')); if (ready && !fromSnapshot && name === 'ab-loop-b' && v == null) osd('ab', 'A–B loop off'); break;
@@ -336,6 +339,7 @@
   // ------------------------------------------------------------------ fullscreen
   let fs = false;
   async function toggleFullscreen() {
+    if (EMBED) { parent.postMessage({ t: 'player-fs' }, '*'); return; }
     const w = win();
     if (!w) { fs = !fs; osd('fs', fs ? 'Fullscreen' : 'Windowed'); return; }
     try { fs = !(await w.isFullscreen()); await w.setFullscreen(fs); } catch (_) {}
@@ -419,7 +423,7 @@
     try { const list = await invoke('player_keys'); keymap = new Map(list.map((k) => [k.key, k])); } catch (_) { /* fallback below */ }
     if (!keymap.size) [['SPACE', 'toggle_pause'], ['LEFT', 'seek', -5], ['RIGHT', 'seek', 5], ['UP', 'volume_add', 5], ['DOWN', 'volume_add', -5], ['m', 'toggle_mute'], ['f', 'fullscreen']].forEach(([key, c, a]) => keymap.set(key, { key, cmd: c, arg: a == null ? null : a }));
   }
-  function closePlayer() { invoke('player_close').catch(() => {}); const w = win(); if (w) w.close().catch(() => {}); }
+  function closePlayer() { invoke('player_close').catch(() => {}); const w = win(); if (w) w.close().catch(() => {}); else if (EMBED) resetIdle(); }
   document.addEventListener('keydown', (e) => {
     if (e.target && /input|textarea/i.test(e.target.tagName)) return;
     if (e.key === 'Escape') { e.preventDefault(); if (ctx.classList.contains('open')) closeCtx(); else if (fs) toggleFullscreen(); else if (sidebarMode) toggleSidebar(sidebarMode); return; }
@@ -434,15 +438,25 @@
     cmd(k.cmd, k.arg);
   });
 
+  function resetIdle() {
+    for (const k of Object.keys(P)) delete P[k];
+    document.body.classList.remove('video-on'); document.body.classList.add('idle');
+    renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav(); renderTicks();
+    if (sidebarMode) toggleSidebar(sidebarMode);
+  }
+  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'fs-state') { fs = !!e.data.on; osd('fs', fs ? 'Fullscreen' : 'Windowed'); } });
+
   // ------------------------------------------------------------------ events from Rust
   async function boot() {
     await loadKeys();
     try { const snap = await invoke('player_props'); for (const [k, v] of Object.entries(snap || {})) apply(k, v, true); } catch (_) {}
     renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav();
+    document.body.classList.toggle('idle', !P.path);
+    document.body.classList.toggle('video-on', !!P.path);
     ready = true; poke();
     if (T && T.event) {
       T.event.listen('player://prop', (e) => apply(e.payload.name, e.payload.value, false));
-      T.event.listen('player://closed', () => { const w = win(); if (w) w.close().catch(() => {}); });
+      T.event.listen('player://closed', () => { const w = win(); if (w) w.close().catch(() => {}); else resetIdle(); });
     }
     if (MOCK) startMock();
   }

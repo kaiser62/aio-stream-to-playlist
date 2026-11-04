@@ -179,3 +179,12 @@ body.buffering #buffering { opacity: 1; }
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
 @media (max-width: 560px) { #volume { display: none; } .time { min-width: 38px; } }
+
+/* ---- embedded in the main window (Player tab) ---- */
+html.embed #titlebar { display: none; }
+html.embed body { background: #000; }
+html.embed body.video-on { background: transparent; }   /* let mpv's window under the app show through */
+#idle { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: rgba(255,255,255,.55); font-size: 13px; text-align: center; pointer-events: none; }
+#idle b { font-size: 15px; color: rgba(255,255,255,.8); font-weight: 600; }
+html.embed body.idle #idle { display: flex; }
+html.embed body.idle #osc { opacity: .35; }

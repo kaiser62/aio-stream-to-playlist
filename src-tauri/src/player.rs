@@ -338,6 +338,7 @@ fn run_reader(app: AppHandle, reader: Box<dyn Read + Send>, dir: PathBuf, id: u6
     }
     // Clear the session only if it is still ours (a newer one may have replaced it).
     let mut g = SESSION.lock().unwrap();
+    let ours = g.as_ref().map(|s| s.id) == Some(id) || g.is_none();
     if g.as_ref().map(|s| s.id) == Some(id) {
         if let Some(mut s) = g.take() {
             if let Some(c) = s.child.as_mut() {
@@ -346,5 +347,8 @@ fn run_reader(app: AppHandle, reader: Box<dyn Read + Send>, dir: PathBuf, id: u6
         }
     }
     drop(g);
-    let _ = app.emit("player://closed", Value::Null);
+    // A newer session may already be playing: only the latest one reports "closed".
+    if ours {
+        let _ = app.emit("player://closed", Value::Null);
+    }
 }

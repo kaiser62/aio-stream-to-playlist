@@ -445,9 +445,14 @@ fn player_recent_remove(st: State<AppState>, url: String) {
     let _ = r.save(&p);
 }
 
-/// Address of the mpv window currently glued under the player window (0 = none).
+/// Address of the mpv window currently glued under the main window (0 = none).
 #[cfg(target_os = "macos")]
 static MPV_WINDOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Where the UI wants the video (CSS px in the main webview); None/zero-size = hidden.
+#[cfg(target_os = "macos")]
+static VIDEO_RECT: std::sync::Mutex<embed::Rect> = std::sync::Mutex::new(None);
+#[cfg(target_os = "macos")]
+static HOOKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(target_os = "macos")]
 fn on_main<T: Send + 'static>(app: &tauri::AppHandle, f: impl FnOnce(objc2::MainThreadMarker) -> T + Send + 'static) -> Result<T, String> {
@@ -462,40 +467,53 @@ fn on_main<T: Send + 'static>(app: &tauri::AppHandle, f: impl FnOnce(objc2::Main
 }
 
 #[cfg(target_os = "macos")]
+fn refit(app: &tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+    let child = MPV_WINDOW.load(Ordering::SeqCst);
+    if child == 0 {
+        return;
+    }
+    let Some(win) = app.get_webview_window("main") else { return };
+    let Ok(parent) = win.ns_window() else { return };
+    let parent = parent as usize;
+    let rect = *VIDEO_RECT.lock().unwrap();
+    let app2 = app.clone();
+    let _ = app2.run_on_main_thread(move || {
+        if let Some(mtm) = objc2::MainThreadMarker::new() {
+            embed::resync(mtm, parent, child, rect);
+        }
+    });
+}
+
+/// The UI reports where the video area is (CSS px relative to the webview's top-left).
+#[tauri::command]
+fn player_set_rect(app: tauri::AppHandle, x: f64, y: f64, w: f64, h: f64) {
+    #[cfg(target_os = "macos")]
+    {
+        *VIDEO_RECT.lock().unwrap() = Some((x, y, w, h));
+        refit(&app);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, x, y, w, h);
+}
+
+#[cfg(target_os = "macos")]
 fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &[Entry], index: usize) -> Result<(), String> {
     use std::sync::atomic::Ordering;
-    use tauri::{TitleBarStyle, WebviewUrl, WebviewWindowBuilder, WindowEvent};
-    let win = match app.get_webview_window("player") {
-        Some(w) => w,
-        None => {
-            let w = WebviewWindowBuilder::new(app, "player", WebviewUrl::App("player.html".into()))
-                .title("Player")
-                .inner_size(960.0, 540.0)
-                .min_inner_size(480.0, 270.0)
-                .transparent(true)
-                .title_bar_style(TitleBarStyle::Overlay)
-                .hidden_title(true)
-                .build()
-                .map_err(|e| e.to_string())?;
-            let app2 = app.clone();
-            let parent = w.ns_window().map_err(|e| e.to_string())? as usize;
-            w.on_window_event(move |e| match e {
-                WindowEvent::Destroyed => {
-                    MPV_WINDOW.store(0, Ordering::SeqCst);
-                    player::close();
-                }
-                WindowEvent::Resized(_) | WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                    let child = MPV_WINDOW.load(Ordering::SeqCst);
-                    if child != 0 {
-                        let _ = on_main(&app2, move |mtm| embed::resync(mtm, parent, child));
-                    }
-                }
-                _ => {}
-            });
-            w
-        }
-    };
+    use tauri::WindowEvent;
+    let win = app.get_webview_window("main").ok_or("main window not found")?;
     let parent = win.ns_window().map_err(|e| e.to_string())? as usize;
+    if !HOOKED.swap(true, Ordering::SeqCst) {
+        let app2 = app.clone();
+        win.on_window_event(move |e| match e {
+            WindowEvent::Destroyed => {
+                MPV_WINDOW.store(0, Ordering::SeqCst);
+                player::close();
+            }
+            WindowEvent::Resized(_) | WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => refit(&app2),
+            _ => {}
+        });
+    }
     MPV_WINDOW.store(0, Ordering::SeqCst);
     let known = on_main(app, embed::snapshot)?;
     player::open_embedded(app, dir, entries, index)?;
@@ -504,7 +522,8 @@ fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &
     std::thread::spawn(move || {
         for _ in 0..100 {
             let k = known.clone();
-            if let Ok(Some(child)) = on_main(&app2, move |mtm| embed::adopt(mtm, parent, &k)) {
+            let rect = *VIDEO_RECT.lock().unwrap();
+            if let Ok(Some(child)) = on_main(&app2, move |mtm| embed::adopt(mtm, parent, &k, rect)) {
                 MPV_WINDOW.store(child, Ordering::SeqCst);
                 return;
             }
@@ -512,7 +531,6 @@ fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &
         }
         eprintln!("embedded player: mpv window never appeared");
     });
-    let _ = win.set_focus();
     Ok(())
 }
 
@@ -592,7 +610,7 @@ pub fn run() {
             search, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
             playlist_save, playlist_delete, playlist_export, open_playlist,
             player_open, player_play, player_cmd, player_close, player_keys,
-            player_props, player_set, player_exec, player_recent, player_recent_remove
+            player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

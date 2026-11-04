@@ -70,7 +70,7 @@ const App = {
     if (v === 'library') this.loadLibrary();
     if (v === 'addons') this.loadAddons();
     if (v === 'playlists') this.loadPlaylists();
-    if (v === 'player') this.loadPlayer(); else clearInterval(this._pnow);
+    if (v === 'player') this.loadPlayer(); else this.syncVideo();
     if (v === 'settings') this.loadSettings();
     window.scrollTo(0, 0);
   },
@@ -85,7 +85,7 @@ const App = {
     $('#app').hidden = false;
     let th = 'auto'; try { th = localStorage.getItem('theme') || 'auto'; } catch (e) {}
     this.setTheme(th);
-    this.bind();
+    this.bind(); this.bindPlayer();
     if (matchMedia('(min-width:1100px)').matches) $('#v-results').classList.add('fopen');
     invoke('addons_seed').catch(() => {});
     const c = await invoke('config_get').catch(() => ({}));
@@ -308,7 +308,7 @@ const App = {
   /* ---------- player tab ---------- */
   async loadPlayer() {
     const fmt = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
-    const play = async (entries, index = 0) => { try { await invoke('player_play', {entries, index}); this.nowPlaying(fmt); } catch (e) { this.err(e); } };
+    const play = async (entries, index = 0) => { try { await invoke('player_play', {entries, index}); this.syncVideo(); setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); } catch (e) { this.err(e); } };
     $('#pl-go').onclick = () => { const v = $('#pl-open').value.trim(); if (!v) return; play([{title: v.split('/').pop().split('?')[0] || v, url: v}]); };
     $('#pl-open').onkeydown = e => { if (e.key === 'Enter') $('#pl-go').click(); };
     const rec = await invoke('player_recent').catch(() => []);
@@ -326,18 +326,29 @@ const App = {
     });
     const keys = await invoke('player_keys').catch(() => []);
     $('#pl-keys').innerHTML = keys.map(k => `<div class="krow"><kbd>${esc(k.key)}</kbd><span>${esc(k.desc)}</span></div>`).join('');
-    this.nowPlaying(fmt); clearInterval(this._pnow); this._pnow = setInterval(() => this.nowPlaying(fmt), 1000);
+    this.syncVideo();
   },
-  async nowPlaying(fmt) {
-    const p = await invoke('player_props').catch(() => ({}));
-    const box = $('#pl-now'); if (!box) return;
-    const title = p['media-title'] || p.filename;
-    if (!title) { box.hidden = true; return; }
-    box.hidden = false;
-    box.innerHTML = `<div class="np"><div class="np-t"><span class="kick">Now playing</span><b>${esc(title)}</b>
-      <span class="mut small">${fmt(p['time-pos'])} / ${fmt(p.duration)}${p.pause ? ' · paused' : ''}</span></div>
-      <div class="np-b"><button class="btn" data-c="prev">Prev</button><button class="btn primary" data-c="toggle_pause">${p.pause ? 'Play' : 'Pause'}</button><button class="btn" data-c="next">Next</button><button class="btn danger" data-c="stop">Close</button></div></div>`;
-    $$('[data-c]', box).forEach(b => b.onclick = async () => { b.dataset.c === 'stop' ? await invoke('player_close').catch(() => {}) : await invoke('player_cmd', {cmd: b.dataset.c, arg: null}).catch(() => {}); setTimeout(() => this.nowPlaying(fmt), 150); });
+  syncVideo() {
+    if (this._vrq) return;
+    this._vrq = requestAnimationFrame(() => {
+      this._vrq = 0;
+      const r = $('#v-player').hidden ? null : $('#pframe').getBoundingClientRect();
+      const W = innerWidth, H = innerHeight;
+      document.documentElement.style.setProperty('--hole', r ? `path(evenodd, "M0 0H${W}V${H}H0Z M${r.left} ${r.top}H${r.right}V${r.bottom}H${r.left}Z")` : 'none');
+      invoke('player_set_rect', r ? {x: r.left, y: r.top, w: r.width, h: r.height} : {x: 0, y: 0, w: 0, h: 0}).catch(() => {});
+    });
+  },
+  async playerFs() {
+    const st = $('#pstage'), on = !st.classList.contains('pfs');
+    st.classList.toggle('pfs', on);
+    try { await window.__TAURI__.window.getCurrentWindow().setFullscreen(on); } catch (e) {}
+    try { $('#pframe').contentWindow.postMessage({t: 'fs-state', on}, '*'); } catch (e) {}
+    setTimeout(() => this.syncVideo(), 150); setTimeout(() => this.syncVideo(), 700);
+  },
+  bindPlayer() {
+    new ResizeObserver(() => this.syncVideo()).observe($('#pframe'));
+    addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true});
+    addEventListener('message', e => { if (e.data && e.data.t === 'player-fs') this.playerFs(); });
   },
 
   /* ---------- players ---------- */
@@ -349,7 +360,7 @@ const App = {
     if (PLAT === 'mac') h += '<button class="btn" data-play="IINA">Open in IINA</button><button class="btn" data-play="VLC">VLC</button><button class="btn" data-play="mpv">mpv</button>';
     else if (desktop) h += '<button class="btn" data-play="">Open in default player</button>';
     wrap.innerHTML = h;
-    wrap.querySelector('[data-app]').onclick = async () => { const r = await this.api('/api/player/open', {name: file}); if (r.error) this.err(r.error); };
+    wrap.querySelector('[data-app]').onclick = async () => { this.show('player'); const r = await this.api('/api/player/open', {name: file}); if (r.error) this.err(r.error); else setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); };
     wrap.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(await invoke('playlist_text', {file})); this.toast('Playlist copied'); } catch (e) { this.err(e); } };
     wrap.querySelector('[data-export]').onclick = async () => { try { this.toast('Saved: ' + await invoke('playlist_export', {file}), 4000); } catch (e) { this.err(e); } };
     $$('[data-play]', wrap).forEach(b => b.onclick = async () => { try { await invoke('open_playlist', {file, player: b.dataset.play || null}); } catch (e) { this.err(e); } });
