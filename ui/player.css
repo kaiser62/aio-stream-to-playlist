@@ -188,3 +188,12 @@ html.embed body.video-on { background: transparent; }   /* let mpv's window unde
 #idle b { font-size: 15px; color: rgba(255,255,255,.8); font-weight: 600; }
 html.embed body.idle #idle { display: flex; }
 html.embed body.idle #osc { opacity: .35; }
+
+/* embedded: no backdrop blur / will-change (they leave ghost outlines over a transparent window) */
+html.embed .vfx { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(26,26,28,.84); box-shadow: none; }
+html.embed #osc, html.embed #sidebar, html.embed #titlebar { will-change: auto; box-shadow: none; filter: none; }
+html.embed #osc { left: 50%; width: min(640px, calc(100% - 32px)); bottom: 16px; }
+html.embed body.sidebar-open #osc { left: 16px; right: auto; width: calc(100% - 332px); transform: none; }
+html.embed body.ui-hidden #osc { transform: translate(-50%, 14px); }
+html.embed body.sidebar-open.ui-hidden #osc { transform: translateY(14px); }
+html.embed #sidebar { width: 300px; }

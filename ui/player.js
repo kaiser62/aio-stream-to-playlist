@@ -191,6 +191,8 @@
   // ------------------------------------------------------------------ property intake
   const quiet = new Set(['time-pos', 'duration', 'demuxer-cache-time', 'estimated-vf-fps', 'core-idle', 'seeking', 'video-params', 'hwdec-current', 'eof-reached', 'paused-for-cache', 'file-loaded', 'path', 'filename', 'media-title', 'playlist', 'playlist-pos', 'track-list', 'chapter-list', 'chapter', 'ab-loop-a', 'ab-loop-b']);
   let ready = false;
+  // Transparent (shows mpv underneath) only once a real video frame exists; black before, so nothing behind the app leaks through.
+  function videoOn() { document.body.classList.toggle('video-on', !!(P.path && P['video-params'])); }
   function apply(name, v, fromSnapshot) {
     const old = P[name]; P[name] = v;
     switch (name) {
@@ -199,7 +201,8 @@
       case 'demuxer-cache-time': case 'paused-for-cache': renderBuffer(); break;
       case 'volume': case 'mute': renderVolume(); if (ready && !fromSnapshot && old !== v && !$('#vol').classList.contains('drag')) osdVolume(); break;
       case 'speed': renderSpeed(); if (ready && !fromSnapshot && old !== v) osd('speed', (Math.round(v * 100) / 100) + 'x', { icon: 'speed', sub: 'Speed' }); break;
-      case 'path': document.body.classList.toggle('video-on', !!v); document.body.classList.toggle('idle', !v); break;
+      case 'path': document.body.classList.toggle('idle', !v); videoOn(); break;
+      case 'video-params': videoOn(); break;
       case 'media-title': case 'filename': renderTitle(); break;
       case 'chapter-list': renderTicks(); renderSidebar(); break;
       case 'ab-loop-a': case 'ab-loop-b': renderLoop(); if (ready && !fromSnapshot && name === 'ab-loop-a' && typeof v === 'number') osd('ab', 'A–B loop: ' + (typeof P['ab-loop-b'] === 'number' ? 'on' : 'A set')); if (ready && !fromSnapshot && name === 'ab-loop-b' && v == null) osd('ab', 'A–B loop off'); break;
@@ -444,7 +447,8 @@
     renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav(); renderTicks();
     if (sidebarMode) toggleSidebar(sidebarMode);
   }
-  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'fs-state') { fs = !!e.data.on; osd('fs', fs ? 'Fullscreen' : 'Windowed'); } });
+  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'reset') { delete P.path; delete P['video-params']; videoOn(); }
+    if (e.data && e.data.t === 'fs-state') { fs = !!e.data.on; osd('fs', fs ? 'Fullscreen' : 'Windowed'); } });
 
   // ------------------------------------------------------------------ events from Rust
   async function boot() {
@@ -452,7 +456,7 @@
     try { const snap = await invoke('player_props'); for (const [k, v] of Object.entries(snap || {})) apply(k, v, true); } catch (_) {}
     renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav();
     document.body.classList.toggle('idle', !P.path);
-    document.body.classList.toggle('video-on', !!P.path);
+    videoOn();
     ready = true; poke();
     if (T && T.event) {
       T.event.listen('player://prop', (e) => apply(e.payload.name, e.payload.value, false));

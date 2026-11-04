@@ -471,3 +471,20 @@ input:disabled+.cbx{opacity:.35}
 #pstage{position:relative;width:100%;aspect-ratio:16/9;max-height:64vh;margin:0 0 16px;border-radius:0;overflow:hidden;background:transparent}
 #pframe{display:block;width:100%;height:100%;border:0;background:transparent;color-scheme:dark}
 #pstage.pfs{position:fixed;inset:0;z-index:1000;max-height:none;aspect-ratio:auto;margin:0}
+
+/* ---- Watching (continue watching) ---- */
+.wt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px}
+.wt-card{position:relative}
+.wt-art{position:relative;display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--line);border-radius:12px;overflow:hidden;padding:0;cursor:pointer;background:radial-gradient(120% 100% at 20% 0%,hsl(var(--h) 38% 30%),hsl(var(--h) 30% 10%))}
+.wt-init{position:absolute;inset:0;display:grid;place-items:center;font:600 34px var(--serif,serif);color:rgba(255,255,255,.55);letter-spacing:.04em}
+.wt-play{position:absolute;right:10px;bottom:14px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,.55);color:#fff;opacity:0;transform:scale(.9);transition:.18s}
+.wt-play .ic{width:16px;height:16px}
+.wt-art:hover .wt-play,.wt-art:focus-visible .wt-play{opacity:1;transform:none}
+.wt-art:hover{border-color:var(--acc-line)}
+.wt-bar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.18)}
+.wt-bar i{display:block;height:100%;background:var(--acc)}
+.wt-x{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);opacity:0;transition:.18s}
+.wt-card:hover .wt-x,.wt-x:focus-visible{opacity:1}
+.wt-meta{display:flex;flex-direction:column;gap:1px;margin-top:8px;min-width:0}
+.wt-meta b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wt-meta span,.wt-meta em{font-size:12px;color:var(--dim);font-style:normal}

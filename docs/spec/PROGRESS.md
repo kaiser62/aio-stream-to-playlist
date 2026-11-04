@@ -41,6 +41,7 @@ Legend: DONE = built and verified by running it. DOING = in flight. UNVERIFIED =
 - macOS build is unsigned/un-notarized.
 
 ## Changelog
+- 2026-11-04: Watching tab (Netflix-style continue watching from recent.json: cards, progress, time left, remove, resume). Fixed control-bar ghost ring (no backdrop blur when embedded), iframe tooltip, bar squeezed by sidebar, desktop leaking through before first frame. Resume verified on real TorBox video.
 - 2026-11-04: player moved from a separate window into the Player tab (iframe + child-window placement); fixed stale `player://closed` from a replaced session; verified with real TorBox video.
 - 2026-11-04: embedded macOS player (child-window trick), IINA-style overlay, Player tab; real-app check partial.
 - 2026-11-04: added player core + mpv backend (unverified at runtime), spec kit, `ui-ux-pro-max` skill; started UI overhaul.

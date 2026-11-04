@@ -70,6 +70,7 @@ const App = {
     if (v === 'library') this.loadLibrary();
     if (v === 'addons') this.loadAddons();
     if (v === 'playlists') this.loadPlaylists();
+    if (v === 'watching') this.loadWatching();
     if (v === 'player') this.loadPlayer(); else this.syncVideo();
     if (v === 'settings') this.loadSettings();
     window.scrollTo(0, 0);
@@ -93,7 +94,7 @@ const App = {
     const h = location.hash.slice(1);
     this.renderResults();
     this.renderHitsEmpty();
-    this.show(['find', 'results', 'addons', 'library', 'playlists', 'player', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
+    this.show(['find', 'results', 'addons', 'library', 'playlists', 'watching', 'player', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
   },
 
   async refreshKeyBanner() {
@@ -306,28 +307,48 @@ const App = {
   },
 
   /* ---------- player tab ---------- */
+  async loadWatching() {
+    const left = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60); return h ? `${h} h ${m} min` : `${Math.max(1, m)} min`; };
+    const clean = raw => {
+      let t = String(raw || ''); try { t = decodeURIComponent(t); } catch (e) {}
+      t = t.replace(/\.(mkv|mp4|avi|m3u8?)$/i, '');
+      const ep = t.match(/S(\d{1,2})E(\d{1,3})/i), yr = t.match(/[.\s_(]((?:19|20)\d{2})[.\s_)]/);
+      const name = (t.split(/[.\s_]+(?=S\d{1,2}E\d|(?:19|20)\d{2}[.\s_]|2160p|1080p|720p|480p|UHD|BluRay|WEB)/i)[0] || t).replace(/[._]+/g, ' ').trim();
+      return {name, ep: ep ? `S${ep[1].padStart(2, '0')} · E${ep[2].padStart(2, '0')}` : '', year: yr ? yr[1] : ''};
+    };
+    const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+    const rec = await invoke('player_recent').catch(() => []);
+    const done = r => r.dur > 0 && r.pos / r.dur >= 0.95;
+    const card = r => {
+      const c = clean(r.title), pct = r.dur > 0 ? Math.min(100, r.pos / r.dur * 100) : 0;
+      const sub = r.dur > 0 ? (done(r) ? 'Watched' : left(r.dur - r.pos) + ' left') : (r.pos > 5 ? 'Resume at ' + left(r.pos) : 'Not started');
+      return `<article class="wt-card" data-u="${esc(r.url)}" style="--h:${hue(c.name)}"><button class="wt-art" aria-label="Play ${esc(c.name)}"><span class="wt-init">${esc(c.name.slice(0, 2).toUpperCase())}</span>
+        <span class="wt-play">${ic('play')}</span>${pct ? `<span class="wt-bar"><i style="width:${pct}%"></i></span>` : ''}</button>
+        <button class="icon-btn wt-x" aria-label="Remove from list">${ic('x')}</button>
+        <div class="wt-meta"><b title="${esc(c.name)}">${esc(c.name)}</b><span>${esc([c.ep, c.year].filter(Boolean).join(' · '))}</span><em>${sub}</em></div></article>`;
+    };
+    const row = (title, list) => list.length ? `<h3 class="ct pl-h">${title}</h3><div class="wt-grid">${list.map(card).join('')}</div>` : '';
+    $('#wt-body').innerHTML = rec.length ? row('Continue watching', rec.filter(r => !done(r))) + row('Watched', rec.filter(done))
+      : '<div class="card pad"><p class="mut">Nothing yet. Play something from Playlists or the Player tab and it shows up here with your progress.</p></div>';
+    $$('#wt-body .wt-card').forEach(el => {
+      const r = rec.find(x => x.url === el.dataset.u);
+      el.querySelector('.wt-art').onclick = () => {
+        this.show('player');
+        (this.resetStage(), invoke('player_play', {entries: [{title: r.title, url: r.url}], index: 0})).then(() => { this.syncVideo(); setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); }).catch(e => this.err(e));
+      };
+      el.querySelector('.wt-x').onclick = async () => { await invoke('player_recent_remove', {url: r.url}).catch(() => {}); this.loadWatching(); };
+    });
+  },
   async loadPlayer() {
     const fmt = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
-    const play = async (entries, index = 0) => { try { await invoke('player_play', {entries, index}); this.syncVideo(); setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); } catch (e) { this.err(e); } };
+    const play = async (entries, index = 0) => { try { await (this.resetStage(), invoke('player_play', {entries, index})); this.syncVideo(); setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); } catch (e) { this.err(e); } };
     $('#pl-go').onclick = () => { const v = $('#pl-open').value.trim(); if (!v) return; play([{title: v.split('/').pop().split('?')[0] || v, url: v}]); };
     $('#pl-open').onkeydown = e => { if (e.key === 'Enter') $('#pl-go').click(); };
-    const rec = await invoke('player_recent').catch(() => []);
-    $('#pl-recent').innerHTML = rec.length ? rec.map((r, i) => {
-      const pct = r.dur > 0 ? Math.min(100, r.pos / r.dur * 100) : 0;
-      return `<div class="item pl-rec" data-i="${i}"><div class="body"><div class="t">${esc(r.title)}</div>
-        <div class="pl-prog"><i style="width:${pct}%"></i></div>
-        <div class="src">${r.pos > 5 ? 'Resume at ' + fmt(r.pos) + (r.dur ? ' of ' + fmt(r.dur) : '') : (r.dur ? fmt(r.dur) : 'Not started')}</div></div>
-        <button class="icon-btn" data-rm="${i}" aria-label="Remove from list">${ic('x')}</button></div>`; }).join('')
-      : '<p class="mut small">Nothing played yet. Files you play here show up with a resume point.</p>';
-    $$('#pl-recent .pl-rec').forEach(el => el.onclick = e => {
-      const r = rec[+el.dataset.i];
-      if (e.target.closest('[data-rm]')) { invoke('player_recent_remove', {url: r.url}).then(() => this.loadPlayer()); return; }
-      play([{title: r.title, url: r.url}]);
-    });
     const keys = await invoke('player_keys').catch(() => []);
     $('#pl-keys').innerHTML = keys.map(k => `<div class="krow"><kbd>${esc(k.key)}</kbd><span>${esc(k.desc)}</span></div>`).join('');
     this.syncVideo();
   },
+  resetStage() { try { $('#pframe').contentWindow.postMessage({t: 'reset'}, '*'); } catch (e) {} },
   syncVideo() {
     if (this._vrq) return;
     this._vrq = requestAnimationFrame(() => {
@@ -360,7 +381,7 @@ const App = {
     if (PLAT === 'mac') h += '<button class="btn" data-play="IINA">Open in IINA</button><button class="btn" data-play="VLC">VLC</button><button class="btn" data-play="mpv">mpv</button>';
     else if (desktop) h += '<button class="btn" data-play="">Open in default player</button>';
     wrap.innerHTML = h;
-    wrap.querySelector('[data-app]').onclick = async () => { this.show('player'); const r = await this.api('/api/player/open', {name: file}); if (r.error) this.err(r.error); else setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); };
+    wrap.querySelector('[data-app]').onclick = async () => { this.show('player'); this.resetStage(); const r = await this.api('/api/player/open', {name: file}); if (r.error) this.err(r.error); else setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); };
     wrap.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(await invoke('playlist_text', {file})); this.toast('Playlist copied'); } catch (e) { this.err(e); } };
     wrap.querySelector('[data-export]').onclick = async () => { try { this.toast('Saved: ' + await invoke('playlist_export', {file}), 4000); } catch (e) { this.err(e); } };
     $$('[data-play]', wrap).forEach(b => b.onclick = async () => { try { await invoke('open_playlist', {file, player: b.dataset.play || null}); } catch (e) { this.err(e); } });

@@ -66,6 +66,7 @@
    <div class="grp">Library</div>
    <button data-v="library"><svg class="ic" aria-hidden="true"><use href="#i-box"/></svg><span>TorBox</span></button>
    <button data-v="playlists"><svg class="ic" aria-hidden="true"><use href="#i-playlist"/></svg><span>Playlists</span></button>
+   <button data-v="watching"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span>Watching</span></button>
    <button data-v="player"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Player</span></button>
    <div class="grp">Configure</div>
    <button data-v="addons"><svg class="ic" aria-hidden="true"><use href="#i-addons"/></svg><span>Addons</span></button>
@@ -207,16 +208,21 @@
    </div>
   </section>
 
+  <!-- WATCHING -->
+  <section id="v-watching" hidden>
+   <header class="ph"><div class="kick"><i>05</i> Library</div><h1>Continue watching</h1>
+    <p class="lede">Everything you played here, with how far you got. Pick one to resume where you stopped.</p></header>
+   <div id="wt-body"></div>
+  </section>
+
   <!-- PLAYER -->
   <section id="v-player" hidden>
-   <header class="ph"><div class="kick"><i>05</i> Library</div><h1>Player</h1>
+   <header class="ph"><div class="kick"><i>06</i> Library</div><h1>Player</h1>
     <p class="lede">The built-in mpv player with IINA-style controls. Open a file or link, or pick up where you left off.</p></header>
-   <div id="pstage"><iframe id="pframe" src="player.html?embed=1" title="Video player" allow="fullscreen"></iframe></div>
+   <div id="pstage"><iframe id="pframe" src="player.html?embed=1" aria-label="Video player" allow="fullscreen"></iframe></div>
    <div class="card pad adder">
     <div class="searchbar slim"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><input id="pl-open" aria-label="File path or URL" placeholder="Paste a video URL or a file path" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn primary" id="pl-go"><svg class="ic" aria-hidden="true"><use href="#i-play"/></svg>Play</button></div>
    </div>
-   <h3 class="ct pl-h">Continue watching</h3>
-   <div id="pl-recent" class="list"></div>
    <h3 class="ct pl-h">Keyboard shortcuts</h3>
    <div class="card pad"><div id="pl-keys" class="keys"></div></div>
   </section>
