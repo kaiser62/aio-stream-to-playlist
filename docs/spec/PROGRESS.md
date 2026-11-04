@@ -72,3 +72,9 @@ Legend: DONE = built and verified by running it. DOING = in flight. UNVERIFIED =
 - NEEDS USER: add repo secret `TAURI_SIGNING_PRIVATE_KEY` (contents of build/keys/updater.key; no password) and make releases reachable (a private repo's release assets are not downloadable anonymously, so the updater gets 404 until the repo or a release host is public).
 - Key hardening: encrypted config + keychain data key, atomic 0600 writes, CSP, URL-stripped errors. See docs/spec/SECURITY.md. UNVERIFIED at runtime (screen was off): keychain prompt behaviour, CSP not breaking the UI, updater end-to-end (needs a published release).
 - Mishap: a scripting error emptied src-tauri/src/lib.rs; restored from the git index and re-created the other session's player_fps height argument (mci input scaled to 1080p). Please review that function.
+
+## Search/Results fixes (2026-11-05)
+- DONE: catalog search retries with/without a leading "the " (`query_variants`, unit-tested) so "beekeeper 2" finds "The Beekeeper 2". Verified live in the app.
+- DONE (code): Results shows "No streams found" after a fetch that returned 0 (was "Nothing fetched yet"); the status line lists active filters (cached only, best 1 per episode, ...) when they hide streams; search box has autocorrect/spellcheck off. The empty-state screen and the filter list are UNVERIFIED in the running app.
+- Learned: local rebuilds re-prompt for the login keychain password (unsigned, new code signature); CI release builds are unsigned too, so auto-updates may re-prompt on macOS until a Developer ID signature is used. Always Allow is the workaround.
+- Known: after a 0-stream fetch the app appeared to stay on the Search tab instead of switching to Results (UNVERIFIED; check `fetchStreams`/`show('results')`).

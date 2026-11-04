@@ -278,7 +278,7 @@ const App = {
       const r = await this.api('/api/fetch', {kind: this.kind, imdb: id, season: +$('#season').value, ep1: +$('#ep1').value, ep2: +$('#ep2').value});
       if (r.error) { st.classList.add('err'); return st.textContent = r.error; }
       this.streams = r.streams.map((s, i) => ({...s, _id: i}));
-      this.errors = r.errors || [];
+      this.errors = r.errors || []; this.fetched = true;
       this.sel.clear(); this.buildChips(); this.applyFilters(true);
       st.textContent = `${this.streams.length} streams fetched.`;
       this.show('results');
@@ -342,8 +342,15 @@ const App = {
     $('#rcount').hidden = !total; $('#rcount').textContent = this.view.length;
     $('#rtitle').textContent = this.title?.name || 'Results';
     const errs = this.errors?.length ? ` · ${this.errors.length} episode error${this.errors.length === 1 ? '' : 's'}: ${this.errors.slice(0, 2).join('; ')}` : '';
-    $('#rstatus').textContent = total ? `${this.view.length} of ${total} streams shown${errs}` : 'Nothing fetched yet.';
+    const on = [];
+    if (+$('#f-res').value !== 1080) on.push('min resolution'); if (+$('#f-max').value) on.push('max size'); if (+$('#f-min').value) on.push('min size');
+    if (+$('#f-seeds').value) on.push('seeders'); if ($('#f-ex').value.trim()) on.push('exclude words'); if ($('#f-in').value.trim()) on.push('must include');
+    if ($('#f-cached').checked) on.push('cached only'); if ($('#f-best').checked) on.push('best 1 per episode');
+    Object.entries(this.chips || {}).forEach(([k, s]) => { if (s.size) on.push(k); });
+    const hid = total && this.view.length < total && on.length ? ` · filters on: ${on.join(', ')}` : '';
+    $('#rstatus').textContent = total ? `${this.view.length} of ${total} streams shown${hid}${errs}` : (this.fetched ? `0 streams found${errs}` : 'Nothing fetched yet.');
     $('#fbtn').hidden = $('#sort').closest('label').hidden = !total;
+    if (!total && this.fetched) { $('#rlist').innerHTML = stateBox('results', 'No streams found', 'Your addons returned nothing for this title. It may be unreleased or not indexed yet. Try another title or check the Addons tab.', {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
     if (!total) { $('#rlist').innerHTML = stateBox('results', 'No results yet', 'Search for a title and fetch streams to see them here.', {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
     if (!this.view.length) { $('#rlist').innerHTML = stateBox('filter', 'Nothing matches your filters', 'Loosen the resolution, size or cached-only filters.', {action: ['Reset filters', 'resetf']}); return this.updateBar(); }
     let last = null;

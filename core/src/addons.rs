@@ -264,6 +264,30 @@ fn has_search(cat: &Value) -> bool {
 
 /// Search the catalogs of all enabled addons that support it; merge by id (first addon wins).
 pub async fn search(client: &reqwest::Client, addons: &[Addon], kind: &str, query: &str) -> Vec<Value> {
+    for q in query_variants(query) {
+        let r = search_one(client, addons, kind, &q).await;
+        if !r.is_empty() {
+            return r;
+        }
+    }
+    Vec::new()
+}
+
+/// Catalog search matches from the start of a title, so "beekeeper 2" misses "The Beekeeper 2".
+/// Try the query as typed, then with a leading "the ", then without a leading "the ".
+fn query_variants(query: &str) -> Vec<String> {
+    let q = query.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut v = vec![q.clone()];
+    let lower = q.to_lowercase();
+    if let Some(rest) = lower.strip_prefix("the ") {
+        v.push(rest.to_string());
+    } else if !q.is_empty() {
+        v.push(format!("the {q}"));
+    }
+    v
+}
+
+async fn search_one(client: &reqwest::Client, addons: &[Addon], kind: &str, query: &str) -> Vec<Value> {
     let q = urlencoding::encode(query).into_owned();
     let jobs = addons.iter().filter(|a| a.enabled).filter_map(|a| {
         let cat = a.manifest.catalogs.iter().find(|c| c.get("type").and_then(Value::as_str) == Some(kind) && has_search(c))?;
@@ -351,6 +375,12 @@ pub async fn meta(client: &reqwest::Client, addons: &[Addon], kind: &str, id: &s
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn query_variants_add_and_strip_leading_the() {
+        assert_eq!(super::query_variants("beekeeper  2"), vec!["beekeeper 2", "the beekeeper 2"]);
+        assert_eq!(super::query_variants("The Matrix"), vec!["The Matrix", "matrix"]);
+    }
+
     use super::*;
 
     #[test]
