@@ -55,8 +55,10 @@ jobs:
           DATA_DIR="$RUNNER_TEMP/smoke" PORT=8799 "$EXE" &
           PID=$!
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:8799/api/status && break; sleep 1; done
-          curl -fs http://127.0.0.1:8799/ | grep -q "Stream Playlist"
-          curl -fs http://127.0.0.1:8799/app.js | grep -q "use strict"
+          curl -fs http://127.0.0.1:8799/ -o "$RUNNER_TEMP/index.html"
+          grep -q "Stream Playlist" "$RUNNER_TEMP/index.html"
+          curl -fs http://127.0.0.1:8799/app.js -o "$RUNNER_TEMP/app.js"
+          grep -q "use strict" "$RUNNER_TEMP/app.js"
           kill $PID || true
       - uses: actions/upload-artifact@v4
         with:
