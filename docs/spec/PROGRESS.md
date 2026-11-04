@@ -58,3 +58,7 @@ Legend: DONE = built and verified by running it. DOING = in flight. UNVERIFIED =
 - The dock instance only edits settings (localStorage `player.fx` + invoke); the main player instance re-reads them and applies on each new file. `dbg` message bridges the debug-overlay toggle.
 - Interpolation on Metal (live app, libmpv 0.41, `vo=gpu-next`, Vulkan over MoltenVK): `interpolation` + `video-sync=display-resample` with `tscale=oversample|linear` accepted and stable on a 4K H.264 24 fps file at a 120 Hz display, 0 dropped frames over 6 s each (Off / Light / Blend). FFmpeg `minterpolate` 60 fps works at 4K but **drops output frames** (Dropped vo ~184 after ~2 min); motion-comp is capped to 1080p by `player_fps` (other session's change, UNVERIFIED in app). Prefer sources <= 1080p for the fps target.
 - UNVERIFIED: `acceptFirstMouse`, simple fullscreen with the dock, mobile layout.
+
+### Dock slimmed (2026-11-04)
+- Frame settings dock: small "Frame" button + inline text summary, no card/border/opaque background (panel is transparent). Dock height follows content (`dock-h` message from the panel, capped 330px); the video stage takes the rest. Dropdown grid only renders when expanded.
+- Seen live (collapsed state, Metal, 4K clip). UNVERIFIED: expanded dropdown state after this change, ghost-render of the transparent panel over the native video, phone widths.

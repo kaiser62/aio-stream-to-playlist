@@ -445,7 +445,7 @@ const App = {
   bindPlayer() {
     new ResizeObserver(() => this.syncVideo()).observe($('#pframe'));
     addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true, capture: true});
-    addEventListener('message', e => { if (e.data && e.data.t === 'idle') { $('#v-player').classList.remove('has-media'); this.setLoading(false); } if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'dbg') { try { $('#pframe').contentWindow.postMessage(e.data, '*'); } catch (_) {} } if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; if (this.vOn) $('#v-player').classList.add('has-media'); $('#pstage').classList.toggle('live', this.vOn); if (this.vOn) this.setLoading(false); this.syncVideo(); } });
+    addEventListener('message', e => { if (e.data && e.data.t === 'idle') { $('#v-player').classList.remove('has-media'); this.setLoading(false); } if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'dock-h') $('#v-player').style.setProperty('--dock-h', Math.min(Math.max(+e.data.h || 0, 40), 330) + 'px'); if (e.data && e.data.t === 'dbg') { try { $('#pframe').contentWindow.postMessage(e.data, '*'); } catch (_) {} } if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; if (this.vOn) $('#v-player').classList.add('has-media'); $('#pstage').classList.toggle('live', this.vOn); if (this.vOn) this.setLoading(false); this.syncVideo(); } });
   },
 
   /* ---------- players ---------- */

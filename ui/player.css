@@ -210,22 +210,22 @@ html.embed #sidebar { width: 300px; }
 #dbg[hidden] { display: none; }
 
 /* ---------- embedded: settings live below the player, not in the OSD ---------- */
-html.panel, html.panel body { background: #1b1b1f; }
+html.panel, html.panel body { background: transparent; }
 html.panel #stage, html.panel #osc, html.panel #titlebar, html.panel #osd, html.panel #buffering, html.panel #flash, html.panel #idle, html.panel #dbg, html.panel #ctx { display: none !important; }
 html.panel #sidebar { position: static; width: auto; height: 100vh; transform: none; visibility: visible; transition: none; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
 html.panel .sb-head { display: none; }
-html.panel .sb-body { padding-top: 6px; }
-html.panel .sb-body { padding-bottom: 14px; }
+html.panel .sb-body { padding: 0; }
+html.panel .sb-sec { padding: 0; margin: 0; }
 
 /* ---------- frame settings: one button holding dropdowns, chosen values as text below ---------- */
-.fx-btn { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 10px; font-weight: 600; font-size: 13px; color: var(--fg); background: rgba(255,255,255,.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
+.fx-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 8px; font-weight: 600; font-size: 12px; color: var(--fg); background: rgba(255,255,255,.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
 .fx-btn:hover { background: rgba(255,255,255,.16); }
-.fx-btn svg { width: 16px; height: 16px; fill: currentColor; }
+.fx-btn svg { width: 14px; height: 14px; fill: currentColor; }
 .fx-chev { width: 7px; height: 7px; margin: -3px 0 0 4px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg); transition: transform .2s; opacity: .7; }
 .fx-btn[aria-expanded="true"] .fx-chev { transform: rotate(-135deg); margin-top: 3px; }
-.fx-sum { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 2px 2px; font-size: 12.5px; color: var(--fg-dim); }
+.fx-sum { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 6px 2px 0; font-size: 11.5px; color: var(--fg-dim); }
 .fx-sum b { font-weight: 600; color: var(--fg); margin-right: 4px; }
-.fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 18px; padding: 14px 2px 4px; }
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px 14px; padding: 10px 2px 2px; }
 .fx-row { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--fg-dim); }
-.fx-row select { appearance: none; -webkit-appearance: none; height: 32px; padding: 0 30px 0 11px; border-radius: 9px; border: 1px solid rgba(255,255,255,.16); color: var(--fg); font: 500 13px/1 inherit; background: rgba(255,255,255,.08) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23bbb' stroke-width='1.6' stroke-linecap='round'/></svg>") no-repeat right 11px center; }
+.fx-row select { appearance: none; -webkit-appearance: none; height: 28px; padding: 0 30px 0 11px; border-radius: 9px; border: 1px solid rgba(255,255,255,.16); color: var(--fg); font: 500 13px/1 inherit; background: rgba(255,255,255,.08) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23bbb' stroke-width='1.6' stroke-linecap='round'/></svg>") no-repeat right 11px center; }
 .fx-row select option { background: #232327; color: #eee; }

@@ -260,6 +260,7 @@
     if (tab === 'playlist') sbPlaylist(body); else if (tab === 'chapters') sbChapters(body);
     else if (tab === 'effects') sbEffects(body); else if (tab === 'video') sbVideo(body); else if (tab === 'audio') sbAudio(body); else sbSub(body);
     body.scrollTop = keep;
+    if (PANEL) { try { parent.postMessage({ t: 'dock-h', h: Math.ceil((body.querySelector('.fx-wrap') || body).getBoundingClientRect().height) + 4 }, '*'); } catch (e) {} } // let the page size the dock to its content
   }
   function sbPlaylist(body) {
     const pl = P.playlist || [];
@@ -331,7 +332,7 @@
   const fxLabel = (k) => { const d = FX_OPTS.find((o) => o[0] === k); const o = d[3].find((x) => String(x[1]) === String(FX[k])); return o ? o[0] : String(FX[k]); };
   function sbEffects(body) {
     const s = el('div', 'fx-wrap'); body.appendChild(s);
-    const btn = el('button', 'fx-btn', I('<path d="M4 8h9M17 8h3M4 16h3M11 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="16" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/>') + '<span>Frame settings</span><i class="fx-chev"></i>');
+    const btn = el('button', 'fx-btn', I('<path d="M4 8h9M17 8h3M4 16h3M11 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="16" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/>') + '<span>Frame</span><i class="fx-chev"></i>');
     btn.setAttribute('aria-expanded', fxOpen); btn.onclick = () => { fxOpen = !fxOpen; renderSidebar(); };
     s.appendChild(btn);
     const sum = el('div', 'fx-sum');
