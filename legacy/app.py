@@ -13,6 +13,11 @@ FROZEN = bool(getattr(sys, "frozen", False))  # PyInstaller build
 BUNDLE = getattr(sys, "_MEIPASS", HERE)
 DATA_DIR = os.environ.get("DATA_DIR") or (os.path.expanduser("~/.aio-stream-to-playlist") if FROZEN else HERE)
 os.makedirs(DATA_DIR, exist_ok=True)
+try:  # frozen builds ship no system CA bundle; certifi fixes CERTIFICATE_VERIFY_FAILED
+    import ssl, certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    SSL_CTX = None
 DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes", "on")
 
 
@@ -63,7 +68,7 @@ def http(url, method="GET", headers=None, data=None, timeout=45):
     req.add_header("User-Agent", "aio-stream-to-playlist/1.0")
     t0 = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as r:
             raw = r.read()
             dbg(f"upstream {method} {url} -> {r.status} {len(raw)}B {int((time.time() - t0) * 1000)}ms")
             return json.loads(raw.decode("utf-8", "replace") or "{}")
