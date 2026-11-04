@@ -192,7 +192,11 @@
   const quiet = new Set(['time-pos', 'duration', 'demuxer-cache-time', 'estimated-vf-fps', 'core-idle', 'seeking', 'video-params', 'hwdec-current', 'eof-reached', 'paused-for-cache', 'file-loaded', 'path', 'filename', 'media-title', 'playlist', 'playlist-pos', 'track-list', 'chapter-list', 'chapter', 'ab-loop-a', 'ab-loop-b']);
   let ready = false;
   // Transparent (shows mpv underneath) only once a real video frame exists; black before, so nothing behind the app leaks through.
-  function videoOn() { document.body.classList.toggle('video-on', !!(P.path && P['video-params'])); }
+  function videoOn() {
+    const on = !!(P.path && P['video-params']);
+    document.body.classList.toggle('video-on', on);
+    if (EMBED && videoOn.last !== on) { videoOn.last = on; try { parent.postMessage({ t: 'video-on', on }, '*'); } catch (e) {} }
+  }
   function apply(name, v, fromSnapshot) {
     const old = P[name]; P[name] = v;
     switch (name) {
@@ -201,7 +205,7 @@
       case 'demuxer-cache-time': case 'paused-for-cache': renderBuffer(); break;
       case 'volume': case 'mute': renderVolume(); if (ready && !fromSnapshot && old !== v && !$('#vol').classList.contains('drag')) osdVolume(); break;
       case 'speed': renderSpeed(); if (ready && !fromSnapshot && old !== v) osd('speed', (Math.round(v * 100) / 100) + 'x', { icon: 'speed', sub: 'Speed' }); break;
-      case 'path': document.body.classList.toggle('idle', !v); videoOn(); break;
+      case 'path': document.body.classList.toggle('idle', !v); videoOn(); if (v && !fromSnapshot) applyFx(); break;
       case 'video-params': videoOn(); break;
       case 'media-title': case 'filename': renderTitle(); break;
       case 'chapter-list': renderTicks(); renderSidebar(); break;
@@ -285,9 +289,36 @@
     for (const [label, value] of items) { const b = el('button', 'chip' + (String(current) === String(value) ? ' on' : ''), esc(label)); b.onclick = () => { onPick(value); setTimeout(renderSidebar, 60); }; c.appendChild(b); }
     parent.appendChild(c);
   }
+  /* Video effects: Anime4K upscaling presets + mpv motion smoothing (frame blending/interpolation) + deband. Persisted per device. */
+  const FX_DEF = { a4k: 'off', smooth: 'off', deband: false, scale: 'default' };
+  let FX = Object.assign({}, FX_DEF);
+  try { Object.assign(FX, JSON.parse(localStorage.getItem('player.fx') || '{}')); } catch (e) {}
+  const SMOOTH = { off: [['interpolation', false], ['video-sync', 'audio'], ['tscale', 'oversample']],
+    light: [['video-sync', 'display-resample'], ['tscale', 'oversample'], ['interpolation', true]],
+    blend: [['video-sync', 'display-resample'], ['tscale', 'linear'], ['interpolation', true]] };
+  const saveFx = () => { try { localStorage.setItem('player.fx', JSON.stringify(FX)); } catch (e) {} };
+  function applyFx(only) {
+    if (!only || only === 'a4k') invoke('player_filter', { preset: FX.a4k }).catch(() => {});
+    if (!only || only === 'smooth') for (const [k, v] of SMOOTH[FX.smooth] || SMOOTH.off) setProp(k, v);
+    if (!only || only === 'deband') setProp('deband', !!FX.deband);
+    if (!only || only === 'scale') { const m = { default: ['bilinear', 'bilinear'], sharp: ['ewa_lanczossharp', 'mitchell'], spline: ['spline36', 'mitchell'] }[FX.scale] || []; if (m.length) { setProp('scale', m[0]); setProp('dscale', m[1]); } }
+  }
+  const setFx = (k, v) => { FX[k] = v; saveFx(); applyFx(k); };
   function sbVideo(body) {
     let s = secHead(body, 'Playback');
     sliderRow(s, 'Speed', { min: 0.25, max: 4, step: 0.05, get: () => P.speed || 1, set: (v) => { P.speed = v; setProp('speed', v); renderSpeed(); }, fmtv: (v) => v + 'x' });
+    s = secHead(body, 'Upscaling (Anime4K)');
+    chips(s, [['Off', 'off'], ['A · HQ', 'a-hq'], ['B · HQ', 'b-hq'], ['C · HQ', 'c-hq'], ['A · Fast', 'a-fast'], ['B · Fast', 'b-fast'], ['C · Fast', 'c-fast']], FX.a4k, (v) => setFx('a4k', v));
+    s.appendChild(el('div', 'sb-empty sb-hint', 'A: clean anime / B: compressed / C: upscale + denoise. Fast presets suit weaker GPUs.'));
+    s = secHead(body, 'Motion smoothing');
+    chips(s, [['Off', 'off'], ['Light', 'light'], ['Blend', 'blend']], FX.smooth, (v) => setFx('smooth', v));
+    s.appendChild(el('div', 'sb-empty sb-hint', 'Frame interpolation in mpv. Motion-compensated (SVP/RIFE) needs VapourSynth.'));
+    s = secHead(body, 'Scaler');
+    chips(s, [['Default', 'default'], ['Sharp', 'sharp'], ['Spline36', 'spline']], FX.scale, (v) => setFx('scale', v));
+    const drow = el('div', 'qs-row'); drow.appendChild(el('label', '', 'Deband'));
+    const dsw = el('button', 'switch'); dsw.setAttribute('role', 'switch'); dsw.setAttribute('aria-checked', !!FX.deband);
+    dsw.onclick = () => { setFx('deband', !FX.deband); setTimeout(renderSidebar, 60); };
+    drow.appendChild(dsw); s.appendChild(drow);
     s = secHead(body, 'Aspect ratio');
     chips(s, [['Default', '-1'], ['4:3', '4:3'], ['16:9', '16:9'], ['16:10', '16:10'], ['21:9', '2.35:1'], ['5:4', '5:4']], P['video-aspect-override'] == null ? '-1' : P['video-aspect-override'], (v) => setProp('video-aspect-override', v));
     s = secHead(body, 'Rotation');

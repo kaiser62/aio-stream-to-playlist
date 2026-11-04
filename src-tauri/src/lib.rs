@@ -1,3 +1,4 @@
+mod shaders;
 #[cfg(desktop)]
 mod mpvlib;
 #[cfg(desktop)]
@@ -252,6 +253,29 @@ async fn search(st: State<'_, AppState>, kind: String, query: String) -> Result<
     Ok(addons::search(&st.client, &list, &kind, &query).await)
 }
 
+/// Poster/summary/episode info for the Watching tab. Uses the user's enabled metadata addons (Cinemeta by default).
+#[tauri::command]
+async fn title_meta(st: State<'_, AppState>, name: String, series: bool, season: Option<u32>, episode: Option<u32>) -> Result<Value, String> {
+    let list = st.addons();
+    let kind = if series { "series" } else { "movie" };
+    let hit = addons::search(&st.client, &list, kind, &name).await;
+    let Some(h) = hit.first() else { return Ok(Value::Null) };
+    let id = h["id"].as_str().unwrap_or("").to_string();
+    let m = addons::meta(&st.client, &list, kind, &id).await.unwrap_or(Value::Null);
+    let s = |k: &str| m.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    let ep = m.get("videos").and_then(Value::as_array).and_then(|v| {
+        v.iter().find(|x| x["season"].as_u64() == season.map(u64::from) && x["episode"].as_u64() == episode.map(u64::from))
+    });
+    let es = |k: &str| ep.and_then(|e| e.get(k)).and_then(Value::as_str).unwrap_or("").to_string();
+    Ok(json!({
+        "id": id, "name": if s("name").is_empty() { h["name"].as_str().unwrap_or("").to_string() } else { s("name") },
+        "year": s("releaseInfo"), "poster": h["poster"].as_str().map(String::from).filter(|x| !x.is_empty()).unwrap_or_else(|| s("poster")),
+        "background": s("background"), "description": s("description"), "rating": s("imdbRating"), "runtime": s("runtime"),
+        "genres": m.get("genres").cloned().unwrap_or(json!([])),
+        "ep_title": if es("name").is_empty() { es("title") } else { es("name") }, "ep_thumb": es("thumbnail"), "ep_overview": es("overview"),
+    }))
+}
+
 #[tauri::command]
 async fn fetch_streams(st: State<'_, AppState>, kind: String, imdb: String, season: Option<u32>, ep1: Option<u32>, ep2: Option<u32>) -> Result<Value, String> {
     let list = st.addons();
@@ -424,6 +448,20 @@ fn player_props() -> Value {
 #[tauri::command]
 fn player_set(prop: String, value: Value) -> Result<(), String> {
     player::set_property(&prop, value)
+}
+
+/// Apply an Anime4K preset ("off", "a-hq", "b-hq", "c-hq", "a-fast", "b-fast", "c-fast").
+#[cfg(desktop)]
+#[tauri::command]
+fn player_filter(st: State<AppState>, preset: String) -> Result<(), String> {
+    let v = shaders::value(&st.dir, &preset)?;
+    player::set_raw_property("glsl-shaders", Value::String(v))
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_filter(_preset: String) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
 }
 
 #[cfg(desktop)]
@@ -607,10 +645,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config_get, config_set, addons_list, addons_add, addons_update, addons_remove, addons_reorder,
             addons_refresh, addon_url, addons_export, addons_import, addons_seed, addon_configure,
-            search, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
+            search, title_meta, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
             playlist_save, playlist_delete, playlist_export, open_playlist,
             player_open, player_play, player_cmd, player_close, player_keys,
-            player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect
+            player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect, player_filter
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

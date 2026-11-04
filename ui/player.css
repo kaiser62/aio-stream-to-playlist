@@ -197,3 +197,5 @@ html.embed body.sidebar-open #osc { left: 16px; right: auto; width: calc(100% - 
 html.embed body.ui-hidden #osc { transform: translate(-50%, 14px); }
 html.embed body.sidebar-open.ui-hidden #osc { transform: translateY(14px); }
 html.embed #sidebar { width: 300px; }
+
+.sb-hint{padding:2px 0 6px;text-align:left;font-size:11px;line-height:1.4;min-height:0}

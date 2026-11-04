@@ -295,6 +295,21 @@ pub async fn search(client: &reqwest::Client, addons: &[Addon], kind: &str, quer
     out
 }
 
+/// Fetch full metadata (`/meta/{kind}/{id}.json`) from the first enabled addon that serves it.
+pub async fn meta(client: &reqwest::Client, addons: &[Addon], kind: &str, id: &str) -> Option<Value> {
+    for a in addons.iter().filter(|a| a.enabled && supports(&a.manifest, "meta", kind, id)) {
+        let url = format!("{}/meta/{}/{}.json", base_of(&a.url), kind, urlencoding::encode(id));
+        if let Ok(r) = client.get(&url).timeout(Duration::from_secs(a.timeout_secs)).send().await {
+            if let Ok(v) = r.json::<Value>().await {
+                if let Some(m) = v.get("meta").filter(|m| m.is_object()) {
+                    return Some(m.clone());
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

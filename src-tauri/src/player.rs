@@ -51,6 +51,10 @@ pub fn set_property(name: &str, value: Value) -> Result<(), String> {
     }
     send_raw(&player::ipc_line(&[json!("set_property"), json!(name), value], REQ.fetch_add(1, Ordering::Relaxed)))
 }
+/// Internal use only (not reachable with UI-supplied property names): set any mpv property.
+pub fn set_raw_property(name: &str, value: Value) -> Result<(), String> {
+    send_raw(&player::ipc_line(&[json!("set_property"), json!(name), value], REQ.fetch_add(1, Ordering::Relaxed)))
+}
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 static REQ: AtomicU64 = AtomicU64::new(1);
 

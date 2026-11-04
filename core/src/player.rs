@@ -251,7 +251,8 @@ pub const SETTABLE: &[&str] = &[
     "volume", "mute", "speed", "pause", "sid", "aid", "vid", "sub-delay", "audio-delay", "sub-scale", "sub-pos",
     "sub-visibility", "video-aspect-override", "video-rotate", "brightness", "contrast", "saturation", "gamma",
     "hue", "hwdec", "loop-file", "loop-playlist", "video-zoom", "panscan", "ab-loop-a", "ab-loop-b", "deinterlace",
-    "audio-pitch-correction", "secondary-sid", "volume-max",
+    "audio-pitch-correction", "secondary-sid", "volume-max", "interpolation", "video-sync", "tscale", "deband",
+    "scale", "cscale", "dscale",
 ];
 const COMMANDS: &[&str] = &[
     "seek", "playlist-play-index", "playlist-next", "playlist-prev", "playlist-remove", "playlist-move",

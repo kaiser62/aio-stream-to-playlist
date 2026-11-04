@@ -41,6 +41,8 @@ Legend: DONE = built and verified by running it. DOING = in flight. UNVERIFIED =
 - macOS build is unsigned/un-notarized.
 
 ## Changelog
+- 2026-11-04: Watching tab now shows series/movie metadata (poster/episode still, title, S/E + episode name, year, rating, genres, summary tooltip) via new `title_meta` command (user's metadata addon, Cinemeta by default), cached in localStorage. Verified live on real items.
+- 2026-11-04: player Video sidebar: Anime4K presets (A/B/C x HQ/Fast, bloc97/Anime4K MIT shaders embedded in `src-tauri/shaders`, extracted to app data, applied by `player_filter`), motion smoothing (Off/Light/Blend = mpv interpolation + display-resample), scaler chips, deband. Verified live: mpv reports the glsl-shaders list, interpolation=true, video-sync=display-resample, tscale=linear. UNVERIFIED: visual quality/perf on real anime, HQ presets on weak GPUs. Not implemented: motion-compensated SVP/RIFE (needs VapourSynth + SVP; SVP 4 installed here but not wired). Fix: video hole in the page is only cut once a video is actually playing (a failed/expired link no longer shows the desktop through the stage).
 - 2026-11-04: Watching tab (Netflix-style continue watching from recent.json: cards, progress, time left, remove, resume). Fixed control-bar ghost ring (no backdrop blur when embedded), iframe tooltip, bar squeezed by sidebar, desktop leaking through before first frame. Resume verified on real TorBox video.
 - 2026-11-04: player moved from a separate window into the Player tab (iframe + child-window placement); fixed stale `player://closed` from a replaced session; verified with real TorBox video.
 - 2026-11-04: embedded macOS player (child-window trick), IINA-style overlay, Player tab; real-app check partial.

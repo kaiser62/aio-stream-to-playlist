@@ -314,7 +314,7 @@ const App = {
       t = t.replace(/\.(mkv|mp4|avi|m3u8?)$/i, '');
       const ep = t.match(/S(\d{1,2})E(\d{1,3})/i), yr = t.match(/[.\s_(]((?:19|20)\d{2})[.\s_)]/);
       const name = (t.split(/[.\s_]+(?=S\d{1,2}E\d|(?:19|20)\d{2}[.\s_]|2160p|1080p|720p|480p|UHD|BluRay|WEB)/i)[0] || t).replace(/[._]+/g, ' ').trim();
-      return {name, ep: ep ? `S${ep[1].padStart(2, '0')} · E${ep[2].padStart(2, '0')}` : '', year: yr ? yr[1] : ''};
+      return {name, s: ep ? +ep[1] : null, e: ep ? +ep[2] : null, ep: ep ? `S${ep[1].padStart(2, '0')} · E${ep[2].padStart(2, '0')}` : '', year: yr ? yr[1] : ''};
     };
     const hue = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
     const rec = await invoke('player_recent').catch(() => []);
@@ -325,7 +325,7 @@ const App = {
       return `<article class="wt-card" data-u="${esc(r.url)}" style="--h:${hue(c.name)}"><button class="wt-art" aria-label="Play ${esc(c.name)}"><span class="wt-init">${esc(c.name.slice(0, 2).toUpperCase())}</span>
         <span class="wt-play">${ic('play')}</span>${pct ? `<span class="wt-bar"><i style="width:${pct}%"></i></span>` : ''}</button>
         <button class="icon-btn wt-x" aria-label="Remove from list">${ic('x')}</button>
-        <div class="wt-meta"><b title="${esc(c.name)}">${esc(c.name)}</b><span>${esc([c.ep, c.year].filter(Boolean).join(' · '))}</span><em>${sub}</em></div></article>`;
+        <div class="wt-meta"><b title="${esc(c.name)}">${esc(c.name)}</b><span class="wt-line">${esc([c.ep, c.year].filter(Boolean).join(' · '))}</span><small class="wt-eptitle"></small><em>${sub}</em></div></article>`;
     };
     const row = (title, list) => list.length ? `<h3 class="ct pl-h">${title}</h3><div class="wt-grid">${list.map(card).join('')}</div>` : '';
     $('#wt-body').innerHTML = rec.length ? row('Continue watching', rec.filter(r => !done(r))) + row('Watched', rec.filter(done))
@@ -337,7 +337,28 @@ const App = {
         (this.resetStage(), invoke('player_play', {entries: [{title: r.title, url: r.url}], index: 0})).then(() => { this.syncVideo(); setTimeout(() => { try { $('#pframe').contentWindow.focus(); } catch (e) {} }, 300); }).catch(e => this.err(e));
       };
       el.querySelector('.wt-x').onclick = async () => { await invoke('player_recent_remove', {url: r.url}).catch(() => {}); this.loadWatching(); };
+      this.enrichCard(el, clean(r.title));
     });
+  },
+  /* Series/movie metadata (poster, episode title, rating, summary) from the user's metadata addon; cached on-device. */
+  async enrichCard(el, c) {
+    const key = 'meta:' + c.name.toLowerCase() + '|' + (c.s ?? '') + '|' + (c.e ?? '');
+    let m = null;
+    try { m = JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) {}
+    if (!m) {
+      m = await invoke('title_meta', {name: c.name, series: c.s != null, season: c.s, episode: c.e}).catch(() => null);
+      if (m) try { localStorage.setItem(key, JSON.stringify(m)); } catch (e) {}
+    }
+    if (!m || !el.isConnected) return;
+    const img = m.ep_thumb || m.background || m.poster;
+    const art = el.querySelector('.wt-art');
+    if (img && /^https?:/.test(img)) { art.style.backgroundImage = `url("${img.replace(/"/g, '%22')}")`; art.classList.add('has-img'); }
+    el.querySelector('b').textContent = m.name || c.name;
+    const line = [c.ep, String(m.year || '').replace(/[–-]\s*$/, ''), m.rating ? '★ ' + m.rating : '', (m.genres || []).slice(0, 2).join(', ')].filter(Boolean).join(' · ');
+    el.querySelector('.wt-line').textContent = line;
+    el.querySelector('.wt-eptitle').textContent = m.ep_title || '';
+    const tip = [m.ep_title, m.ep_overview || m.description].filter(Boolean).join('\n\n');
+    if (tip) el.querySelector('.wt-meta').title = tip;
   },
   async loadPlayer() {
     const fmt = t => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
@@ -353,7 +374,7 @@ const App = {
     if (this._vrq) return;
     this._vrq = requestAnimationFrame(() => {
       this._vrq = 0;
-      const r = $('#v-player').hidden ? null : $('#pframe').getBoundingClientRect();
+      const r = $('#v-player').hidden || !this.vOn ? null : $('#pframe').getBoundingClientRect();
       const W = innerWidth, H = innerHeight;
       document.documentElement.style.setProperty('--hole', r ? `path(evenodd, "M0 0H${W}V${H}H0Z M${r.left} ${r.top}H${r.right}V${r.bottom}H${r.left}Z")` : 'none');
       invoke('player_set_rect', r ? {x: r.left, y: r.top, w: r.width, h: r.height} : {x: 0, y: 0, w: 0, h: 0}).catch(() => {});
@@ -369,7 +390,7 @@ const App = {
   bindPlayer() {
     new ResizeObserver(() => this.syncVideo()).observe($('#pframe'));
     addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true});
-    addEventListener('message', e => { if (e.data && e.data.t === 'player-fs') this.playerFs(); });
+    addEventListener('message', e => { if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; this.syncVideo(); } });
   },
 
   /* ---------- players ---------- */
