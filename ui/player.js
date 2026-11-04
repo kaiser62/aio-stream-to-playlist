@@ -61,15 +61,15 @@
   const osdTimers = new Map();
   function osd(key, text, { icon, bar, sub } = {}) {
     let item = osdBox.querySelector(`[data-k="${key}"]`);
-    if (!item) { item = el('div', 'osd-item vfx'); item.dataset.k = key; osdBox.appendChild(item); }
+    if (!item) { item = el('div', 'osd-item'); item.dataset.k = key; osdBox.appendChild(item); }
     item.classList.remove('out');
     item.innerHTML = (icon ? ICON[icon] || '' : '') + `<span>${esc(text)}</span>` +
       (sub ? `<span class="osd-sub">${esc(sub)}</span>` : '') +
       (bar != null ? `<span class="osd-bar"><i style="width:${clamp(bar, 0, 100)}%"></i></span>` : '');
-    clearTimeout(osdTimers.get(key));
+    clearTimeout(osdTimers.get(key)); clearTimeout(item._rm);   // re-showing a fading row must cancel its pending removal
     osdTimers.set(key, setTimeout(() => {
       item.classList.add('out');
-      setTimeout(() => item.remove(), 360);
+      item._rm = setTimeout(() => item.remove(), 360);
     }, 1500));
     while (osdBox.children.length > 3) osdBox.firstChild.remove();
   }
@@ -485,10 +485,11 @@
       ['Filters', `${vf || 'none'}${sh ? '  ·  shaders ' + (typeof sh === 'string' ? sh.split(/[:;]/).length : sh) : ''}`],
       ['Speed', (P.speed || 1) + '×'],
     ];
-    dbg.textContent = rows.map(([k, v]) => k.padEnd(8) + v).join('\n');
+    dbg.textContent = rows.map(([k, v]) => k.padEnd(8) + v).join('\n'); placeOsd();
   }
+  function placeOsd() { osdBox.style.top = dbgOn ? (dbg.offsetHeight + 28) + 'px' : ''; }   // keep the OSD card below the debug panel
   function setDbg(on, save = true) {
-    dbgOn = !!on; dbg.hidden = !dbgOn; renderDbg();
+    dbgOn = !!on; dbg.hidden = !dbgOn; renderDbg(); placeOsd();
     if (save) try { localStorage.setItem('player.dbg', dbgOn ? '1' : '0'); } catch (_) {}
     document.querySelectorAll('[data-dbg]').forEach((b) => b.classList.toggle('on', dbgOn));
   }

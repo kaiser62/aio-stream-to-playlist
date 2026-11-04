@@ -1,14 +1,14 @@
 /* Player Liquid Glass (toggle: html.pglass, set from Settings > Appearance > Liquid Glass > Player).
    In the embedded player real backdrop blur is off (it ghosts over the native video window), so the glass look is
    built from a vertical highlight gradient, a bright 1px edge and an inner specular line. */
-html.pglass .vfx, html.pglass #sidebar, html.pglass .osd-item, html.pglass #ctx {
+html.pglass .vfx, html.pglass #sidebar, html.pglass #osd, html.pglass #ctx {
   background: linear-gradient(180deg, rgba(255,255,255,calc(.2*var(--gl,1))), rgba(255,255,255,calc(.07*var(--gl,1))) 34%, rgba(20,20,24,.0)), rgba(26,26,30,calc(.7*var(--gl,1)));
   border: 1px solid rgba(255,255,255,.22);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.38), inset 0 0 0 1px rgba(0,0,0,.28), 0 18px 44px -14px rgba(0,0,0,.6);
 }
 html.pglass #osc { border-radius: 26px; padding: 12px 20px 14px; }
 html.pglass #sidebar { border-radius: 24px 0 0 24px; border-right: 0; }
-html.pglass .osd-item { border-radius: 16px; }
+html.pglass #osd { border-radius: 18px; }
 html.pglass #ctx { border-radius: 16px; }
 html.pglass .chip { border-radius: 30px; background: rgba(255,255,255,.12); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
 html.pglass .chip.on { background: var(--accent); box-shadow: inset 0 1px 0 rgba(255,255,255,.4); }
@@ -17,3 +17,6 @@ html:not(.embed).pglass .vfx, html:not(.embed).pglass #sidebar {
   -webkit-backdrop-filter: blur(34px) saturate(2); backdrop-filter: blur(34px) saturate(2);
   background: linear-gradient(180deg, rgba(255,255,255,calc(.22*var(--gl,1))), rgba(255,255,255,calc(.06*var(--gl,1))) 40%), rgba(20,20,24,calc(.38*var(--gl,1)));
 }
+/* embedded: outer shadows render as dark rings over the native video window, keep only inner highlights */
+html.embed.pglass .vfx, html.embed.pglass #sidebar, html.embed.pglass #osd, html.embed.pglass #ctx, html.embed.pglass #osc { box-shadow: inset 0 1px 0 rgba(255,255,255,.38), inset 0 0 0 1px rgba(0,0,0,.22); }
+html.embed #dbg { box-shadow: none; }

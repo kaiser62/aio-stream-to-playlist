@@ -181,7 +181,7 @@ pub fn bindings() -> Vec<Binding> {
         b("PGUP", Prev, "Previous in playlist"),
         b("Meta+RIGHT", ChapterNext, "Next chapter"),
         b("Meta+LEFT", ChapterPrev, "Previous chapter"),
-        b("i", Stats, "Playback stats"),
+        b("i", Stats, "Debug overlay (fps, details)"),
         b("Meta+w", Stop, "Close player"),
         b("q", Stop, "Close player"),
     ]
