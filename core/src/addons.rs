@@ -284,6 +284,14 @@ fn query_variants(query: &str) -> Vec<String> {
     } else if !q.is_empty() {
         v.push(format!("the {q}"));
     }
+    // "beekeeper 1" / "matrix reloaded 2": the first film often has no number in its title, so drop trailing words.
+    let words: Vec<&str> = q.split(' ').collect();
+    for n in (1..words.len()).rev() {
+        let w = words[..n].join(" ");
+        if !w.eq_ignore_ascii_case("the") && !v.iter().any(|x| x.eq_ignore_ascii_case(&w)) {
+            v.push(w);
+        }
+    }
     v
 }
 
@@ -377,8 +385,9 @@ pub async fn meta(client: &reqwest::Client, addons: &[Addon], kind: &str, id: &s
 mod tests {
     #[test]
     fn query_variants_add_and_strip_leading_the() {
-        assert_eq!(super::query_variants("beekeeper  2"), vec!["beekeeper 2", "the beekeeper 2"]);
+        assert_eq!(super::query_variants("beekeeper  2"), vec!["beekeeper 2", "the beekeeper 2", "beekeeper"]);
         assert_eq!(super::query_variants("The Matrix"), vec!["The Matrix", "matrix"]);
+        assert_eq!(super::query_variants("beekeeper 1"), vec!["beekeeper 1", "the beekeeper 1", "beekeeper"]);
     }
 
     use super::*;
