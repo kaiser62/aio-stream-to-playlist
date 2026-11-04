@@ -6,6 +6,8 @@
   const MOCK = new URLSearchParams(location.search).has('mock');
   const EMBED = new URLSearchParams(location.search).has('embed');
   if (EMBED) document.documentElement.classList.add('embed');
+  const setGlass = (on) => document.documentElement.classList.toggle('pglass', !!on);
+  { let g = '1'; try { g = localStorage.getItem('ui.glass.player') || '1'; } catch (e) {} setGlass(g === '1'); }
   const T = window.__TAURI__ || (EMBED && window.parent && window.parent.__TAURI__) || undefined;
   const $ = (s, r = document) => r.querySelector(s);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -193,27 +195,31 @@
   let ready = false;
   // Transparent (shows mpv underneath) only once a real video frame exists; black before, so nothing behind the app leaks through.
   function videoOn() {
-    const on = !!(P.path && P['video-params']);
-    document.body.classList.toggle('video-on', on);
-    if (EMBED && videoOn.last !== on) { videoOn.last = on; try { parent.postMessage({ t: 'video-on', on }, '*'); } catch (e) {} }
+    const on = !!(P.path && P['video-params'] && P['time-pos'] != null);
+    clearTimeout(videoOn.t);
+    const set = (v) => {
+      document.body.classList.toggle('video-on', v);
+      if (EMBED && videoOn.last !== v) { videoOn.last = v; try { parent.postMessage({ t: 'video-on', on: v }, '*'); } catch (e) {} }
+    };
+    if (!on) set(false); else videoOn.t = setTimeout(() => set(true), 220); // let mpv draw its first frame before the page opens the hole
   }
   function apply(name, v, fromSnapshot) {
     const old = P[name]; P[name] = v;
     switch (name) {
       case 'pause': renderPlay(); if (ready && !fromSnapshot && old !== v) flash(v ? 'pause' : 'play'); if (ready && !fromSnapshot && old !== v) osd('pause', v ? 'Paused' : 'Playing', { icon: v ? 'pause' : 'play' }); break;
-      case 'time-pos': case 'duration': renderTime(); if (name === 'duration') { renderTicks(); renderLoop(); } break;
+      case 'time-pos': case 'duration': if (name === 'time-pos' && old == null && v != null) videoOn(); renderTime(); if (name === 'duration') { renderTicks(); renderLoop(); } break;
       case 'demuxer-cache-time': case 'paused-for-cache': renderBuffer(); break;
       case 'volume': case 'mute': renderVolume(); if (ready && !fromSnapshot && old !== v && !$('#vol').classList.contains('drag')) osdVolume(); break;
-      case 'speed': renderSpeed(); if (ready && !fromSnapshot && old !== v) osd('speed', (Math.round(v * 100) / 100) + 'x', { icon: 'speed', sub: 'Speed' }); break;
+      case 'speed': renderSpeed(); if (ready && !fromSnapshot && old != null && old !== v) osd('speed', (Math.round(v * 100) / 100) + 'x', { icon: 'speed', sub: 'Speed' }); break;
       case 'path': document.body.classList.toggle('idle', !v); videoOn(); if (v && !fromSnapshot) applyFx(); break;
       case 'video-params': videoOn(); break;
       case 'media-title': case 'filename': renderTitle(); break;
       case 'chapter-list': renderTicks(); renderSidebar(); break;
       case 'ab-loop-a': case 'ab-loop-b': renderLoop(); if (ready && !fromSnapshot && name === 'ab-loop-a' && typeof v === 'number') osd('ab', 'A–B loop: ' + (typeof P['ab-loop-b'] === 'number' ? 'on' : 'A set')); if (ready && !fromSnapshot && name === 'ab-loop-b' && v == null) osd('ab', 'A–B loop off'); break;
       case 'playlist': case 'playlist-pos': renderNav(); renderSidebar(); break;
-      case 'track-list': case 'sid': case 'aid': renderSidebar(); if (ready && !fromSnapshot && (name === 'sid' || name === 'aid') && old !== v) osdTrack(name); break;
-      case 'sub-delay': if (ready && !fromSnapshot && old !== v) osd('subd', 'Subtitle delay ' + (v * 1000).toFixed(0) + ' ms'); break;
-      case 'audio-delay': if (ready && !fromSnapshot && old !== v) osd('audd', 'Audio delay ' + (v * 1000).toFixed(0) + ' ms'); break;
+      case 'track-list': case 'sid': case 'aid': renderSidebar(); if (ready && !fromSnapshot && (name === 'sid' || name === 'aid') && old != null && old !== v) osdTrack(name); break;
+      case 'sub-delay': if (ready && !fromSnapshot && old != null && old !== v) osd('subd', 'Subtitle delay ' + (v * 1000).toFixed(0) + ' ms'); break;
+      case 'audio-delay': if (ready && !fromSnapshot && old != null && old !== v) osd('audd', 'Audio delay ' + (v * 1000).toFixed(0) + ' ms'); break;
       default: if (sidebarMode === 'settings') renderSidebar();
     }
   }
@@ -290,7 +296,7 @@
     parent.appendChild(c);
   }
   /* Video effects: Anime4K upscaling presets + mpv motion smoothing (frame blending/interpolation) + deband. Persisted per device. */
-  const FX_DEF = { a4k: 'off', smooth: 'off', deband: false, scale: 'default' };
+  const FX_DEF = { a4k: 'off', smooth: 'off', deband: false, scale: 'default', fps: 0, fpsMode: 'blend' };
   let FX = Object.assign({}, FX_DEF);
   try { Object.assign(FX, JSON.parse(localStorage.getItem('player.fx') || '{}')); } catch (e) {}
   const SMOOTH = { off: [['interpolation', false], ['video-sync', 'audio'], ['tscale', 'oversample']],
@@ -300,6 +306,7 @@
   function applyFx(only) {
     if (!only || only === 'a4k') invoke('player_filter', { preset: FX.a4k }).catch(() => {});
     if (!only || only === 'smooth') for (const [k, v] of SMOOTH[FX.smooth] || SMOOTH.off) setProp(k, v);
+    if (!only || only === 'fps' || only === 'fpsMode') invoke('player_fps', { target: FX.fps, mode: FX.fpsMode }).catch(() => {});
     if (!only || only === 'deband') setProp('deband', !!FX.deband);
     if (!only || only === 'scale') { const m = { default: ['bilinear', 'bilinear'], sharp: ['ewa_lanczossharp', 'mitchell'], spline: ['spline36', 'mitchell'] }[FX.scale] || []; if (m.length) { setProp('scale', m[0]); setProp('dscale', m[1]); } }
   }
@@ -313,12 +320,20 @@
     s = secHead(body, 'Motion smoothing');
     chips(s, [['Off', 'off'], ['Light', 'light'], ['Blend', 'blend']], FX.smooth, (v) => setFx('smooth', v));
     s.appendChild(el('div', 'sb-empty sb-hint', 'Frame interpolation in mpv. Motion-compensated (SVP/RIFE) needs VapourSynth.'));
+    s = secHead(body, 'Target frame rate');
+    chips(s, [['Display', 0], ['60', 60], ['90', 90], ['120', 120]], FX.fps, (v) => setFx('fps', +v));
+    chips(s, [['Blend (light)', 'blend'], ['Motion-comp (heavy)', 'mci']], FX.fpsMode, (v) => setFx('fpsMode', v));
+    s.appendChild(el('div', 'sb-empty sb-hint', 'Synthesizes frames on the CPU with FFmpeg. 90 and 120 need a display that can show them; motion-comp may stutter at high resolutions.'));
     s = secHead(body, 'Scaler');
     chips(s, [['Default', 'default'], ['Sharp', 'sharp'], ['Spline36', 'spline']], FX.scale, (v) => setFx('scale', v));
     const drow = el('div', 'qs-row'); drow.appendChild(el('label', '', 'Deband'));
     const dsw = el('button', 'switch'); dsw.setAttribute('role', 'switch'); dsw.setAttribute('aria-checked', !!FX.deband);
     dsw.onclick = () => { setFx('deband', !FX.deband); setTimeout(renderSidebar, 60); };
     drow.appendChild(dsw); s.appendChild(drow);
+    const grow = el('div', 'qs-row'); grow.appendChild(el('label', '', 'Debug overlay (I)'));
+    const gsw = el('button', 'switch'); gsw.setAttribute('role', 'switch'); gsw.setAttribute('aria-checked', dbgOn);
+    gsw.onclick = () => { setDbg(!dbgOn); setTimeout(renderSidebar, 60); };
+    grow.appendChild(gsw); s.appendChild(grow);
     s = secHead(body, 'Aspect ratio');
     chips(s, [['Default', '-1'], ['4:3', '4:3'], ['16:9', '16:9'], ['16:10', '16:10'], ['21:9', '2.35:1'], ['5:4', '5:4']], P['video-aspect-override'] == null ? '-1' : P['video-aspect-override'], (v) => setProp('video-aspect-override', v));
     s = secHead(body, 'Rotation');
@@ -388,11 +403,32 @@
   });
   $('#stage').addEventListener('dblclick', () => { clearTimeout(clickTimer); toggleFullscreen(); });
   let wheelAcc = 0, wheelX = 0;
-  $('#stage').addEventListener('wheel', (e) => {
+  // Trackpad / wheel swipes: horizontal = seek, vertical = volume. Listens on the whole page (the controls
+  // overlay the stage) and ignores the scrollable sidebar / menu. Resets after a pause so momentum can't pile up.
+  let wheelT = 0, wheelLock = 0;
+  document.addEventListener('wheel', (e) => {
+    if (e.target.closest && e.target.closest('#sidebar, #ctx')) return;
     e.preventDefault();
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { wheelX += e.deltaX; if (Math.abs(wheelX) > 40) { cmd('seek', wheelX > 0 ? 5 : -5); wheelX = 0; } }
-    else { wheelAcc += e.deltaY; if (Math.abs(wheelAcc) > 6) { cmd('volume_add', wheelAcc < 0 ? 2 : -2); wheelAcc = 0; } }
+    const now = performance.now();
+    if (now - wheelT > 220) { wheelX = 0; wheelAcc = 0; }
+    wheelT = now;
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      wheelX += e.deltaX;
+      if (Math.abs(wheelX) > 36 && now - wheelLock > 90) { const d = wheelX > 0 ? 5 : -5; osd('seek', (d > 0 ? '+' : '') + d + ' s', { icon: d > 0 ? 'fwd' : 'back' }); cmd('seek', d); wheelX = 0; wheelLock = now; }
+    } else {
+      wheelAcc += e.deltaY;
+      if (Math.abs(wheelAcc) > 8 && now - wheelLock > 40) { cmd('volume_add', wheelAcc < 0 ? 2 : -2); wheelAcc = 0; wheelLock = now; }
+    }
   }, { passive: false });
+  // Touch swipes (phones/tablets): horizontal drag seeks, vertical drag on the right half changes volume.
+  let tch = null;
+  $('#stage').addEventListener('touchstart', (e) => { const t = e.touches[0]; tch = { x: t.clientX, y: t.clientY, mx: 0, my: 0 }; }, { passive: true });
+  $('#stage').addEventListener('touchmove', (e) => {
+    if (!tch) return; const t = e.touches[0]; const dx = t.clientX - tch.x, dy = t.clientY - tch.y;
+    if (Math.abs(dx) > Math.abs(dy)) { const s = Math.trunc((dx - tch.mx) / 24); if (s) { cmd('seek', s * 5); tch.mx += s * 24; clearTimeout(clickTimer); } }
+    else if (tch.x > innerWidth / 2) { const s = Math.trunc((tch.my - dy) / 14); if (s) { cmd('volume_add', s * 3); tch.my -= s * 14; clearTimeout(clickTimer); } }
+  }, { passive: true });
+  $('#stage').addEventListener('touchend', () => { tch = null; }, { passive: true });
 
   // ------------------------------------------------------------------ context menu
   const ctx = $('#ctx');
@@ -409,7 +445,7 @@
       ['Playlist', '', () => toggleSidebar('playlist')],
       ['Quick settings', '', () => toggleSidebar('settings')],
       ['Screenshot', '⌘S', () => { cmd('screenshot'); osd('shot', 'Screenshot taken'); }],
-      ['Playback stats', 'I', () => cmd('stats')],
+      ['Debug overlay', 'I', () => setDbg(!dbgOn)],
       null,
       ['Close player', 'Q', closePlayer],
     ];
@@ -426,6 +462,37 @@
     ctx.style.top = Math.min(e.clientY, innerHeight - r.height - 8) + 'px';
   });
   document.addEventListener('pointerdown', (e) => { if (!ctx.contains(e.target)) closeCtx(); }, true);
+
+  // ------------------------------------------------------------------ debug overlay (key I, context menu): playback fps + details, top-left
+  let dbgOn = false; try { dbgOn = localStorage.getItem('player.dbg') === '1'; } catch (_) {}
+  const dbg = document.createElement('pre'); dbg.id = 'dbg'; dbg.hidden = !dbgOn; document.body.appendChild(dbg);
+  const f1 = (v, d = 1) => (typeof v === 'number' && isFinite(v) ? v.toFixed(d) : '–');
+  function renderDbg() {
+    if (!dbgOn) return;
+    const vp = P['video-params'] || {};
+    const n = (k) => (typeof P[k] === 'number' ? P[k] : null);
+    const vf = Array.isArray(P.vf) ? P.vf.map((x) => x.name || x.label).join(',') : '';
+    const sh = typeof P['glsl-shaders'] === 'string' ? P['glsl-shaders'] : Array.isArray(P['glsl-shaders']) ? P['glsl-shaders'].length : '';
+    const rows = [
+      ['Video', `${vp.w || '–'}×${vp.h || '–'} ${P['video-codec'] ? String(P['video-codec']).split(' ')[0] : ''} ${vp.pixelformat || ''}`],
+      ['FPS', `playing ${f1(n('estimated-vf-fps'))}  ·  source ${f1(n('container-fps'), 3)}  ·  display ${f1(n('display-fps'))}`],
+      ['Dropped', `vo ${n('frame-drop-count') ?? '–'}  ·  decoder ${n('decoder-frame-drop-count') ?? '–'}`],
+      ['A/V sync', n('avsync') == null ? '–' : (n('avsync') * 1000).toFixed(0) + ' ms'],
+      ['Decode', `${P['hwdec-current'] || 'software'}  ·  vo ${P['current-vo'] || '–'}`],
+      ['Audio', `${P['audio-codec-name'] || '–'}  ·  ${n('audio-bitrate') ? Math.round(n('audio-bitrate') / 1000) + ' kb/s' : ''}`],
+      ['Bitrate', n('video-bitrate') ? (n('video-bitrate') / 1e6).toFixed(1) + ' Mb/s' : '–'],
+      ['Cache', n('demuxer-cache-time') != null ? '+' + f1(n('demuxer-cache-time') - (P['time-pos'] || 0), 0) + ' s' : '–'],
+      ['Filters', `${vf || 'none'}${sh ? '  ·  shaders ' + (typeof sh === 'string' ? sh.split(/[:;]/).length : sh) : ''}`],
+      ['Speed', (P.speed || 1) + '×'],
+    ];
+    dbg.textContent = rows.map(([k, v]) => k.padEnd(8) + v).join('\n');
+  }
+  function setDbg(on, save = true) {
+    dbgOn = !!on; dbg.hidden = !dbgOn; renderDbg();
+    if (save) try { localStorage.setItem('player.dbg', dbgOn ? '1' : '0'); } catch (_) {}
+    document.querySelectorAll('[data-dbg]').forEach((b) => b.classList.toggle('on', dbgOn));
+  }
+  setInterval(renderDbg, 500);
 
   // ------------------------------------------------------------------ chrome auto-hide
   let hideTimer = null;
@@ -462,6 +529,7 @@
     if (e.target && /input|textarea/i.test(e.target.tagName)) return;
     if (e.key === 'Escape') { e.preventDefault(); if (ctx.classList.contains('open')) closeCtx(); else if (fs) toggleFullscreen(); else if (sidebarMode) toggleSidebar(sidebarMode); return; }
     if (e.key === 'Tab') { e.preventDefault(); toggleSidebar('playlist'); return; }
+    if ((e.key === 'i' || e.key === 'I') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setDbg(!dbgOn); return; }
     const k = keymap.get(keyName(e));
     if (!k) return;
     e.preventDefault();
@@ -475,10 +543,11 @@
   function resetIdle() {
     for (const k of Object.keys(P)) delete P[k];
     document.body.classList.remove('video-on'); document.body.classList.add('idle');
+    if (EMBED) parent.postMessage({ t: 'idle' }, '*');
     renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav(); renderTicks();
     if (sidebarMode) toggleSidebar(sidebarMode);
   }
-  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'reset') { delete P.path; delete P['video-params']; videoOn(); }
+  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'glass') setGlass(e.data.on); if (e.data && e.data.t === 'glass-op') document.documentElement.style.setProperty('--gl', e.data.v / 100); if (e.data && e.data.t === 'reset') { delete P.path; delete P['video-params']; videoOn(); }
     if (e.data && e.data.t === 'fs-state') { fs = !!e.data.on; osd('fs', fs ? 'Fullscreen' : 'Windowed'); } });
 
   // ------------------------------------------------------------------ events from Rust

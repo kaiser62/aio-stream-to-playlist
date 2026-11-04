@@ -199,3 +199,7 @@ html.embed body.sidebar-open.ui-hidden #osc { transform: translateY(14px); }
 html.embed #sidebar { width: 300px; }
 
 .sb-hint{padding:2px 0 6px;text-align:left;font-size:11px;line-height:1.4;min-height:0}
+#dbg { position: fixed; top: 14px; left: 14px; z-index: 40; margin: 0; padding: 10px 12px; border-radius: 10px; max-width: min(520px, calc(100% - 28px));
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #e8ffe8; background: rgba(8,10,8,.72); border: 1px solid rgba(255,255,255,.16);
+  white-space: pre-wrap; pointer-events: none; text-shadow: 0 1px 2px #000; }
+#dbg[hidden] { display: none; }

@@ -58,6 +58,7 @@
     player_cmd: () => null, player_close: () => null, player_play: () => null,
     player_props: () => ({'media-title': 'Severance S02E04', 'time-pos': 1130, duration: 3412, pause: false}),
     player_recent: () => [{title: 'Severance S02E04 · Woe\'s Hollow', url: 'a', pos: 1130, dur: 3412, at: 1}, {title: 'Dune.Part.Two.2024.2160p.REMUX', url: 'b', pos: 0, dur: 9960, at: 1}, {title: 'Arrival.2016.1080p', url: 'c', pos: 5400, dur: 6960, at: 1}],
+    logs_get: () => [], logs_clear: () => null, log_push: () => null, window_fullscreen: ({on}) => on,
     title_meta: ({name, series, season, episode}) => ({id: 'tt0', name, year: '2022', rating: '8.7', genres: ['Drama', 'Thriller'], poster: poster('#3b5a63', '#101c20'), background: '', description: 'Mock summary.', ep_title: series ? 'Woe\'s Hollow' : '', ep_thumb: '', ep_overview: ''}),
     player_recent_remove: () => null,
     player_keys: () => [['SPACE', 'Play / pause'], ['← / →', 'Seek 5 s'], ['⇧← / ⇧→', 'Seek 60 s'], ['↑ / ↓', 'Volume'], ['M', 'Mute'], ['[ / ]', 'Speed'], ['F', 'Fullscreen'], ['< / >', 'Previous / next']].map(([key, desc]) => ({key, desc})),

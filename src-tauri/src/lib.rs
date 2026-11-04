@@ -1,3 +1,4 @@
+mod applog;
 mod shaders;
 #[cfg(desktop)]
 mod mpvlib;
@@ -418,6 +419,7 @@ async fn player_open(app: tauri::AppHandle, st: State<'_, AppState>, name: Optio
 #[cfg(desktop)]
 #[tauri::command]
 async fn player_play(app: tauri::AppHandle, st: State<'_, AppState>, entries: Vec<Entry>, index: Option<usize>) -> Result<String, String> {
+    crate::alog!("info", "play {} item(s) from the player", entries.len());
     start_player(&app, &st.dir, entries, index.unwrap_or(0))
 }
 
@@ -431,7 +433,7 @@ fn start_player(app: &tauri::AppHandle, dir: &std::path::Path, entries: Vec<Entr
     if mpvlib::find_libmpv().is_some() {
         match open_embedded_macos(app, dir, &entries, index) {
             Ok(()) => return Ok("embedded".into()),
-            Err(e) => eprintln!("embedded player failed, falling back to an external mpv window: {e}"),
+            Err(e) => crate::alog!("error", "embedded player failed, falling back to an external mpv window: {e}"),
         }
     }
     player::open(app, dir, &entries, index)?;
@@ -454,13 +456,43 @@ fn player_set(prop: String, value: Value) -> Result<(), String> {
 #[cfg(desktop)]
 #[tauri::command]
 fn player_filter(st: State<AppState>, preset: String) -> Result<(), String> {
-    let v = shaders::value(&st.dir, &preset)?;
+    let v = shaders::value(&st.dir, &preset).inspect_err(|e| crate::alog!("error", "shader preset {preset}: {e}"))?;
+    crate::alog!("info", "upscaling preset: {preset}");
     player::set_raw_property("glsl-shaders", Value::String(v))
 }
 
 #[cfg(mobile)]
 #[tauri::command]
 fn player_filter(_preset: String) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+/// Frame-rate target (0 = off, else 60/90/120) via FFmpeg `minterpolate`; `mode` is "blend" (cheap) or "mci" (motion-compensated, heavy CPU).
+#[cfg(desktop)]
+#[tauri::command]
+fn player_fps(target: u32, mode: String) -> Result<(), String> {
+    crate::alog!("info", "frame-rate target: {target} ({mode})");
+    if !matches!(target, 0 | 30 | 48 | 60 | 90 | 120) {
+        return Err("unsupported frame rate".into());
+    }
+    let vf = if target == 0 {
+        String::new()
+    } else {
+        let mi = match mode.as_str() {
+            "mci" => "mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1",
+            "blend" => "mi_mode=blend",
+            _ => return Err("unknown mode".into()),
+        };
+        format!("lavfi=[minterpolate=fps={target}:{mi}]")
+    };
+    // Software filters need frames in system memory: use a copy-back decoder while one is active.
+    player::set_raw_property("hwdec", Value::String(if target == 0 { "auto-safe" } else { "auto-copy-safe" }.into()))?;
+    player::set_raw_property("vf", Value::String(vf))
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_fps(_target: u32, _mode: String) -> Result<(), String> {
     Err("The built-in player is not available on mobile yet".into())
 }
 
@@ -535,6 +567,26 @@ fn player_set_rect(app: tauri::AppHandle, x: f64, y: f64, w: f64, h: f64) {
     let _ = (app, x, y, w, h);
 }
 
+/// Fullscreen for the player. macOS uses "simple" fullscreen (same Space, no animation) because native
+/// fullscreen moves the window to its own Space and mpv's child window then covers the HTML controls.
+#[tauri::command]
+fn logs_get(since: u64) -> Vec<applog::Line> { applog::since(since) }
+#[tauri::command]
+fn logs_clear() { applog::clear() }
+#[tauri::command]
+fn log_push(level: String, msg: String) { applog::push(if ["error", "warn", "info", "debug"].contains(&level.as_str()) { &level } else { "info" }, &msg) }
+
+#[tauri::command]
+fn window_fullscreen(app: tauri::AppHandle, on: bool) -> Result<bool, String> {
+    let w = app.get_webview_window("main").ok_or("no window")?;
+    crate::alog!("info", "fullscreen: {on}");
+    #[cfg(target_os = "macos")]
+    w.set_simple_fullscreen(on).map_err(|e| e.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    w.set_fullscreen(on).map_err(|e| e.to_string())?;
+    Ok(on)
+}
+
 #[cfg(target_os = "macos")]
 fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &[Entry], index: usize) -> Result<(), String> {
     use std::sync::atomic::Ordering;
@@ -567,7 +619,7 @@ fn open_embedded_macos(app: &tauri::AppHandle, dir: &std::path::Path, entries: &
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
-        eprintln!("embedded player: mpv window never appeared");
+        crate::alog!("error", "embedded player: mpv window never appeared");
     });
     Ok(())
 }
@@ -648,7 +700,7 @@ pub fn run() {
             search, title_meta, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
             playlist_save, playlist_delete, playlist_export, open_playlist,
             player_open, player_play, player_cmd, player_close, player_keys,
-            player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect, player_filter
+            player_props, player_set, player_exec, player_recent, player_recent_remove, player_set_rect, player_filter, player_fps, window_fullscreen, logs_get, logs_clear, log_push
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

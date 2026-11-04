@@ -52,6 +52,10 @@ fn sync(parent: &NSWindow, child: &NSWindow, rect: Rect) {
             r.size.height = h;
             child.setAlphaValue(1.0);
             child.setFrame_display(r, true);
+            // Native fullscreen reshuffles child ordering and can leave mpv's window above the webview
+            // (controls/OSD vanish): re-assert "below the parent" and the same window level every sync.
+            child.setLevel(parent.level());
+            child.orderWindow_relativeTo(NSWindowOrderingMode::Below, parent.windowNumber());
         }
         _ => child.setAlphaValue(0.0), // no visible video area: hide it
     }

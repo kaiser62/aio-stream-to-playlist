@@ -22,3 +22,5 @@
 See the end of PLAYER.md. Also: final product name, TorBox branding permission, keychain crate choice (`keyring`), Windows/Linux signing.
 
 - 2026-11-04: Anime4K shaders (MIT, bloc97) are embedded and applied only by preset name through `player_filter` (UI never passes paths to mpv; `glsl-shaders` is not in SETTABLE). Motion smoothing uses built-in mpv interpolation; real SVP/RIFE integration deferred (needs VapourSynth, not store-friendly).
+
+- 2026-11-04: macOS fullscreen uses tao simple fullscreen (same Space), not native fullscreen: native moves the window to its own Space and mpv's child window ends up above the transparent webview, hiding the controls. Logs are in-memory only (no file, no network) and URLs are reduced to scheme+host before storing.

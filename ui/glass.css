@@ -1,0 +1,70 @@
+/* =====================================================================================
+   Liquid Glass layer (Apple-style translucent material, works on WebKit / WebView2 / WebKitGTK / Android WebView).
+   Recipe: ambient colour behind (so there is something to refract) + translucent fill + heavy blur & saturation
+   + 1px light edge + top specular highlight + soft long shadow. Falls back to the solid surfaces above when
+   backdrop-filter is unavailable or the user asks for reduced transparency. Accent stays amber.
+   ===================================================================================== */
+:root{
+  --g-fill:rgba(255,255,255,calc(.52*var(--gl,1)));--g-fill-2:rgba(255,255,255,calc(.34*var(--gl,1)));--g-fill-hi:rgba(255,255,255,calc(.72*var(--gl,1)));
+  --g-edge:rgba(255,255,255,.65);--g-edge-lo:rgba(120,100,70,.16);--g-spec:rgba(255,255,255,.8);
+  --g-shadow:0 1px 1px rgba(60,40,10,.06),0 12px 32px -14px rgba(60,40,10,.28);
+  --g-blur:blur(26px) saturate(1.9);
+  --orb-1:rgba(255,170,70,.34);--orb-2:rgba(110,140,255,.26);--orb-3:rgba(70,200,190,.2);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --g-fill:rgba(44,40,38,calc(.5*var(--gl,1)));--g-fill-2:rgba(255,255,255,calc(.07*var(--gl,1)));--g-fill-hi:rgba(70,64,60,calc(.62*var(--gl,1)));
+  --g-edge:rgba(255,255,255,.16);--g-edge-lo:rgba(0,0,0,.35);--g-spec:rgba(255,255,255,.22);
+  --g-shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -16px rgba(0,0,0,.7);
+  --orb-1:rgba(242,150,50,.26);--orb-2:rgba(90,110,255,.22);--orb-3:rgba(50,170,170,.16)}}
+:root[data-theme=dark]{
+  --g-fill:rgba(44,40,38,calc(.5*var(--gl,1)));--g-fill-2:rgba(255,255,255,calc(.07*var(--gl,1)));--g-fill-hi:rgba(70,64,60,calc(.62*var(--gl,1)));
+  --g-edge:rgba(255,255,255,.16);--g-edge-lo:rgba(0,0,0,.35);--g-spec:rgba(255,255,255,.22);
+  --g-shadow:0 1px 1px rgba(0,0,0,.3),0 16px 40px -16px rgba(0,0,0,.7);
+  --orb-1:rgba(242,150,50,.26);--orb-2:rgba(90,110,255,.22);--orb-3:rgba(50,170,170,.16)}
+
+/* ambient colour field behind everything (still clipped by the video hole) */
+body::before{background:
+  radial-gradient(46% 38% at 12% 6%,var(--orb-1),transparent 70%),
+  radial-gradient(40% 42% at 92% 14%,var(--orb-2),transparent 72%),
+  radial-gradient(50% 44% at 70% 104%,var(--orb-3),transparent 70%),
+  radial-gradient(36% 30% at 2% 86%,var(--orb-2),transparent 72%)}
+body::after{opacity:0}
+
+@supports ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){
+  .card,.side,.sendbar,.buildbar,.dlg,.toast,.seg,.searchbar,.hit,.wt-card .wt-meta{
+    -webkit-backdrop-filter:var(--g-blur);backdrop-filter:var(--g-blur)}
+  .card,.dlg{background:linear-gradient(180deg,var(--g-fill-hi),var(--g-fill) 38%);border:1px solid var(--g-edge);
+    box-shadow:inset 0 1px 0 var(--g-spec),inset 0 0 0 1px var(--g-edge-lo),var(--g-shadow);border-radius:22px}
+  .side{background:var(--g-fill);border-right:1px solid var(--g-edge);box-shadow:inset -1px 0 0 var(--g-edge-lo),inset 0 1px 0 var(--g-spec)}
+  .sendbar,.buildbar{background:var(--g-fill-hi);border:1px solid var(--g-edge);border-radius:24px;box-shadow:inset 0 1px 0 var(--g-spec),var(--g-shadow)}
+  .toast{background:var(--g-fill-hi);color:var(--fg);border:1px solid var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec),var(--g-shadow)}
+  .toast.bad{background:color-mix(in srgb,var(--bad) 78%,transparent);color:#fff}
+  .modal{background:rgba(20,16,12,.28);-webkit-backdrop-filter:blur(8px) saturate(1.4);backdrop-filter:blur(8px) saturate(1.4)}
+  .seg{background:var(--g-fill-2);border:1px solid var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec),inset 0 0 0 1px var(--g-edge-lo)}
+  .seg button.on{background:var(--g-fill-hi);box-shadow:inset 0 1px 0 var(--g-spec),0 2px 8px rgba(0,0,0,.18)}
+  .searchbar{background:var(--g-fill-2);border:1px solid var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec),inset 0 0 0 1px var(--g-edge-lo);border-radius:18px}
+  input,select{background:var(--g-fill-2);border-color:var(--g-edge)}
+  .hit{background:var(--g-fill);border:1px solid var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec),var(--g-shadow)}
+  .wt-art{border-color:var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec),var(--g-shadow)}
+  /* controls */
+  .btn:not(.primary):not(.ghost):not(.danger-fill){background:var(--g-fill-2);border:1px solid var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec);
+    -webkit-backdrop-filter:blur(14px) saturate(1.6);backdrop-filter:blur(14px) saturate(1.6)}
+  .btn:not(.primary):not(.ghost):hover{background:var(--g-fill-hi);border-color:var(--g-edge)}
+  .btn.primary{border:1px solid rgba(255,255,255,.35);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 10px 24px -10px var(--acc)}
+  .chip{background:var(--g-fill-2);border-color:var(--g-edge);box-shadow:inset 0 1px 0 var(--g-spec);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  .chip.on{background:var(--acc-soft);border-color:var(--acc-line)}
+  #nav button{border-radius:14px}
+  #nav button:hover{background:var(--g-fill-2)}
+  #nav button.on{background:var(--g-fill-hi);box-shadow:inset 0 1px 0 var(--g-spec),inset 0 0 0 1px var(--g-edge-lo),0 4px 14px -8px rgba(0,0,0,.4)}
+}
+@media(max-width:719px){@supports (backdrop-filter:blur(1px)){
+  .side{border-top:1px solid var(--g-edge);background:var(--g-fill-hi);box-shadow:inset 0 1px 0 var(--g-spec)}}}
+/* user asked for less transparency, or no GPU blur: go back to solid surfaces */
+@media(prefers-reduced-transparency:reduce){
+  .card,.side,.sendbar,.buildbar,.dlg,.toast,.seg,.searchbar,.hit,.btn,.chip,.modal{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+  .card,.dlg,.side,.sendbar,.buildbar,.toast,.hit{background:var(--surface)!important}
+}
+.card,.hit,.btn,.chip,#nav button{transition:background .2s var(--ease),border-color .2s var(--ease),box-shadow .2s var(--ease),transform .2s var(--ease)}
+.gl-op{display:flex;align-items:center;gap:12px;margin-top:10px}
+.gl-op input[type=range]{flex:1;accent-color:var(--acc)}
+.gl-op #glopv{min-width:3em;text-align:right}

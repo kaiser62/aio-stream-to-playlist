@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Companion">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="glass.css" id="glass-css">
 <title>Companion for TorBox</title>
 </head>
 <body>
@@ -71,6 +72,7 @@
    <div class="grp">Configure</div>
    <button data-v="addons"><svg class="ic" aria-hidden="true"><use href="#i-addons"/></svg><span>Addons</span></button>
    <button data-v="settings"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg><span>Settings</span></button>
+   <button data-v="logs"><svg class="ic" aria-hidden="true"><use href="#i-results"/></svg><span>Logs</span></button>
   </nav>
   <div class="side-foot">
    <button class="rail-toggle" id="railtog" aria-label="Expand navigation" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-panel"/></svg><span>Collapse</span></button>
@@ -227,6 +229,15 @@
    <div class="card pad"><div id="pl-keys" class="keys"></div></div>
   </section>
 
+  <!-- LOGS -->
+  <section id="v-logs" hidden>
+   <header class="ph row-ph"><div><div class="kick"><i>08</i> Configure</div><h1>Logs</h1>
+    <p class="lede">What the app and the player have been doing. Kept in memory only, never sent anywhere; links are shortened to their host.</p></div>
+    <div class="ph-actions"><button class="btn" id="lg-copy">Copy</button><button class="btn" id="lg-clear">Clear</button></div></header>
+   <div class="card pad"><div class="row" style="gap:8px;margin-bottom:10px"><div class="seg" id="lg-level"><button data-l="all" class="on">All</button><button data-l="warn">Warnings</button><button data-l="error">Errors</button></div><label class="mut small" style="margin-left:auto"><input type="checkbox" id="lg-follow" checked> Follow</label></div>
+    <pre id="lg-box" class="logbox" aria-live="off"></pre></div>
+  </section>
+
   <!-- ADDONS -->
   <section id="v-addons" hidden>
    <header class="ph row-ph"><div><div class="kick"><i>05</i> Configure</div><h1>Addons</h1>
@@ -268,6 +279,10 @@
        <button data-t="light"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg>Light</button>
        <button data-t="dark"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg>Dark</button>
       </div>
+      <div class="sg-h" style="margin-top:22px"><div><h3>Liquid Glass</h3><p class="mut small">Translucent, Apple-style material. Switch to Classic for the solid look. Applies live.</p></div></div>
+      <div class="seg wide gl-row"><span class="gl-lbl">App</span><button data-g="app" data-v="1" class="on">Glass</button><button data-g="app" data-v="0">Classic</button></div>
+      <div class="seg wide gl-row"><span class="gl-lbl">Player</span><button data-g="player" data-v="1" class="on">Glass</button><button data-g="player" data-v="0">Classic</button></div>
+      <div class="gl-row gl-op"><span class="gl-lbl">Opacity</span><input type="range" id="glop" min="10" max="100" step="5" value="55" aria-label="Glass opacity"><span id="glopv" class="mut small">55%</span></div>
      </div>
      <div class="card pad sgroup" id="s-about" hidden>
       <div class="about"><img src="icon.svg" alt="" width="56" height="56"><div><h3>Companion for TorBox</h3><p class="mut small">An unofficial companion app. Not affiliated with TorBox or Stremio. You are responsible for the content you access.</p></div></div>

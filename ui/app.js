@@ -42,7 +42,33 @@ const App = {
     t.innerHTML = (tone === 'bad' ? ic('alert') : '') + `<span>${esc(msg)}</span>`; t.hidden = false;
     clearTimeout(this._t); this._t = setTimeout(() => t.hidden = true, ms);
   },
-  err(e, ms = 4500) { this.toast(String(e && e.error ? e.error : e), ms, 'bad'); },
+  /* Logs tab: pulls the Rust-side ring buffer (and UI errors pushed into it) while the tab is open */
+  _lg: {last: 0, lines: [], level: 'all', t: null},
+  startLogs() {
+    const L = this._lg; this.stopLogs(); L.last = 0; L.lines = [];
+    const pull = async () => {
+      try { const n = await invoke('logs_get', {since: L.last}); if (n && n.length) { L.lines.push(...n); L.last = n[n.length - 1].id; if (L.lines.length > 1500) L.lines.splice(0, L.lines.length - 1500); this.renderLogs(); } } catch (e) {}
+    };
+    this.renderLogs(); pull(); L.t = setInterval(pull, 1000);
+  },
+  stopLogs() { clearInterval(this._lg.t); this._lg.t = null; },
+  renderLogs() {
+    const L = this._lg, box = $('#lg-box'); if (!box) return;
+    const rank = {debug: 0, info: 1, warn: 2, error: 3}, min = L.level === 'all' ? 0 : rank[L.level];
+    const t = ts => { const d = new Date(ts); return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0'); };
+    const rows = L.lines.filter(l => (rank[l.level] ?? 1) >= min);
+    box.textContent = rows.length ? rows.map(l => `${t(l.ts)}  ${l.level.toUpperCase().padEnd(5)} ${l.msg}`).join('\n') : 'Nothing logged yet.';
+    if ($('#lg-follow').checked) box.scrollTop = box.scrollHeight;
+  },
+  bindLogs() {
+    $$('#lg-level button').forEach(b => b.onclick = () => { this._lg.level = b.dataset.l; $$('#lg-level button').forEach(x => x.classList.toggle('on', x === b)); this.renderLogs(); });
+    $('#lg-clear').onclick = async () => { try { await invoke('logs_clear'); } catch (e) {} this._lg.lines = []; this.renderLogs(); };
+    $('#lg-copy').onclick = () => { try { navigator.clipboard.writeText($('#lg-box').textContent); this.toast('Logs copied', 1800); } catch (e) { this.toast('Copy failed', 2500, 'bad'); } };
+    const push = (level, msg) => invoke('log_push', {level, msg: String(msg).slice(0, 600)}).catch(() => {});   // UI errors go to the same log
+    addEventListener('error', e => push('error', 'UI: ' + e.message + (e.filename ? ' @' + e.filename.split('/').pop() + ':' + e.lineno : '')));
+    addEventListener('unhandledrejection', e => push('error', 'UI promise: ' + (e.reason && (e.reason.message || e.reason.error) || e.reason)));
+  },
+  err(e, ms = 4500) { try { invoke('log_push', {level: 'error', msg: 'UI: ' + String(e && e.error ? e.error : e).slice(0, 400)}).catch(() => {}); } catch (_) {} this.setLoading(false); this.toast(String(e && e.error ? e.error : e), ms, 'bad'); },
 
   /* promise-based replacement for confirm()/prompt(): works in every webview */
   ask({title, msg = '', ok = 'OK', danger = false, input = null}) {
@@ -73,9 +99,26 @@ const App = {
     if (v === 'watching') this.loadWatching();
     if (v === 'player') this.loadPlayer(); else this.syncVideo();
     if (v === 'settings') this.loadSettings();
+    if (v === 'logs') this.startLogs(); else this.stopLogs();
     window.scrollTo(0, 0);
   },
 
+  /* Liquid Glass on/off, separately for the app and the player (persisted, default on) */
+  glass: {app: true, player: true},
+  setGlass(kind, on, save = true) {
+    this.glass[kind] = !!on;
+    if (kind === 'app') { const l = $('#glass-css'); if (l) l.disabled = !on; }
+    else { try { $('#pframe').contentWindow.postMessage({t: 'glass', on: !!on}, '*'); } catch (e) {} }
+    if (save) try { localStorage.setItem('ui.glass.' + kind, on ? '1' : '0'); } catch (e) {}
+    $$('.gl-row button[data-g="' + kind + '"]').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === !!on));
+  },
+  setGlassOp(v, save = true) {
+    v = Math.max(10, Math.min(100, +v || 55));
+    document.documentElement.style.setProperty('--gl', v / 100);
+    try { $('#pframe').contentWindow.postMessage({t: 'glass-op', v}, '*'); } catch (e) {}
+    const r = $('#glop'); if (r) r.value = v; const l = $('#glopv'); if (l) l.textContent = v + '%';
+    if (save) try { localStorage.setItem('ui.glass.op', String(v)); } catch (e) {}
+  },
   setTheme(t) {
     try { t === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', t); } catch (e) {}
     t === 'auto' ? document.documentElement.removeAttribute('data-theme') : document.documentElement.dataset.theme = t;
@@ -86,6 +129,11 @@ const App = {
     $('#app').hidden = false;
     let th = 'auto'; try { th = localStorage.getItem('theme') || 'auto'; } catch (e) {}
     this.setTheme(th);
+    for (const k of ['app', 'player']) { let v = '1'; try { v = localStorage.getItem('ui.glass.' + k) || '1'; } catch (e) {} this.setGlass(k, v === '1', false); }
+    let gop = 55; try { gop = +(localStorage.getItem('ui.glass.op') || 55); } catch (e) {}
+    this.setGlassOp(gop, false); $('#glop').oninput = e => this.setGlassOp(e.target.value);
+    $$('.gl-row button').forEach(b => b.onclick = () => this.setGlass(b.dataset.g, b.dataset.v === '1'));
+    $('#pframe').addEventListener('load', () => { this.setGlass('player', this.glass.player, false); this.setGlassOp(+($('#glop').value), false); });
     this.bind(); this.bindPlayer();
     if (matchMedia('(min-width:1100px)').matches) $('#v-results').classList.add('fopen');
     invoke('addons_seed').catch(() => {});
@@ -94,7 +142,7 @@ const App = {
     const h = location.hash.slice(1);
     this.renderResults();
     this.renderHitsEmpty();
-    this.show(['find', 'results', 'addons', 'library', 'playlists', 'watching', 'player', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
+    this.show(['find', 'results', 'addons', 'library', 'playlists', 'watching', 'player', 'settings', 'logs'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
   },
 
   async refreshKeyBanner() {
@@ -103,7 +151,7 @@ const App = {
   },
 
   bind() {
-    $$('#nav button').forEach(b => b.onclick = () => this.show(b.dataset.v));
+    $$('#nav button').forEach(b => b.onclick = () => this.show(b.dataset.v)); this.bindLogs();
     document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) this.show(g.dataset.goto); });
     $('#railtog').onclick = () => { const sh = $('.shell'); sh.classList.toggle('nav-open'); $('#railtog').setAttribute('aria-expanded', sh.classList.contains('nav-open')); };
     $('#navscrim').onclick = () => { $('.shell').classList.remove('nav-open'); $('#railtog').setAttribute('aria-expanded', 'false'); };
@@ -369,7 +417,12 @@ const App = {
     $('#pl-keys').innerHTML = keys.map(k => `<div class="krow"><kbd>${esc(k.key)}</kbd><span>${esc(k.desc)}</span></div>`).join('');
     this.syncVideo();
   },
-  resetStage() { try { $('#pframe').contentWindow.postMessage({t: 'reset'}, '*'); } catch (e) {} },
+  setLoading(on) {
+    const st = $('#pstage'); if (!st) return;
+    st.classList.toggle('loading', on); clearTimeout(this._lt);
+    if (on) this._lt = setTimeout(() => st.classList.remove('loading'), 25000);
+  },
+  resetStage() { $('#v-player').classList.add('has-media'); this.setLoading(true); try { $('#pframe').contentWindow.postMessage({t: 'reset'}, '*'); } catch (e) {} },
   syncVideo() {
     if (this._vrq) return;
     this._vrq = requestAnimationFrame(() => {
@@ -381,16 +434,16 @@ const App = {
     });
   },
   async playerFs() {
-    const st = $('#pstage'), on = !st.classList.contains('pfs');
-    st.classList.toggle('pfs', on);
-    try { await window.__TAURI__.window.getCurrentWindow().setFullscreen(on); } catch (e) {}
+    const st = $('#pstage'), on = !document.documentElement.classList.contains('pfs');
+    try { await invoke('window_fullscreen', {on}); } catch (e) { try { await window.__TAURI__.window.getCurrentWindow().setFullscreen(on); } catch (_) {} }
+    st.classList.toggle('pfs', on); document.documentElement.classList.toggle('pfs', on);
     try { $('#pframe').contentWindow.postMessage({t: 'fs-state', on}, '*'); } catch (e) {}
-    setTimeout(() => this.syncVideo(), 150); setTimeout(() => this.syncVideo(), 700);
+    setTimeout(() => this.syncVideo(), 100); setTimeout(() => this.syncVideo(), 500); setTimeout(() => this.syncVideo(), 1200);
   },
   bindPlayer() {
     new ResizeObserver(() => this.syncVideo()).observe($('#pframe'));
     addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true});
-    addEventListener('message', e => { if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; this.syncVideo(); } });
+    addEventListener('message', e => { if (e.data && e.data.t === 'idle') { $('#v-player').classList.remove('has-media'); this.setLoading(false); } if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; $('#pstage').classList.toggle('live', this.vOn); if (this.vOn) this.setLoading(false); this.syncVideo(); } });
   },
 
   /* ---------- players ---------- */

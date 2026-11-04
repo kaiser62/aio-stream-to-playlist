@@ -243,6 +243,8 @@ pub const OBSERVED: &[&str] = &[
     "paused-for-cache", "demuxer-cache-time", "video-params", "hwdec-current", "hwdec", "brightness",
     "contrast", "saturation", "gamma", "hue", "video-rotate", "video-aspect-override", "eof-reached",
     "core-idle", "estimated-vf-fps", "video-zoom", "panscan", "deinterlace",
+    "container-fps", "display-fps", "frame-drop-count", "decoder-frame-drop-count", "video-codec", "audio-codec-name",
+    "avsync", "video-bitrate", "audio-bitrate", "current-vo", "vf", "glsl-shaders",
 ];
 pub const OBS_FIRST_GENERIC: u64 = 100;
 
