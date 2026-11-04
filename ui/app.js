@@ -108,14 +108,14 @@ const App = {
   setGlass(kind, on, save = true) {
     this.glass[kind] = !!on;
     if (kind === 'app') { const l = $('#glass-css'); if (l) l.disabled = !on; }
-    else { try { $('#pframe').contentWindow.postMessage({t: 'glass', on: !!on}, '*'); } catch (e) {} }
+    else { try { this.pmsg({t: 'glass', on: !!on}); } catch (e) {} }
     if (save) try { localStorage.setItem('ui.glass.' + kind, on ? '1' : '0'); } catch (e) {}
     $$('.gl-row button[data-g="' + kind + '"]').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === !!on));
   },
   setGlassOp(v, save = true) {
     v = Math.max(10, Math.min(100, +v || 55));
     document.documentElement.style.setProperty('--gl', v / 100);
-    try { $('#pframe').contentWindow.postMessage({t: 'glass-op', v}, '*'); } catch (e) {}
+    try { this.pmsg({t: 'glass-op', v}); } catch (e) {}
     const r = $('#glop'); if (r) r.value = v; const l = $('#glopv'); if (l) l.textContent = v + '%';
     if (save) try { localStorage.setItem('ui.glass.op', String(v)); } catch (e) {}
   },
@@ -133,6 +133,7 @@ const App = {
     let gop = 55; try { gop = +(localStorage.getItem('ui.glass.op') || 55); } catch (e) {}
     this.setGlassOp(gop, false); $('#glop').oninput = e => this.setGlassOp(e.target.value);
     $$('.gl-row button').forEach(b => b.onclick = () => this.setGlass(b.dataset.g, b.dataset.v === '1'));
+    $('#ppanel').addEventListener('load', () => { this.setGlass('player', this.glass.player, false); this.setGlassOp(+($('#glop').value), false); });
     $('#pframe').addEventListener('load', () => { this.setGlass('player', this.glass.player, false); this.setGlassOp(+($('#glop').value), false); });
     this.bind(); this.bindPlayer();
     if (matchMedia('(min-width:1100px)').matches) $('#v-results').classList.add('fopen');
@@ -422,7 +423,8 @@ const App = {
     st.classList.toggle('loading', on); clearTimeout(this._lt);
     if (on) this._lt = setTimeout(() => st.classList.remove('loading'), 25000);
   },
-  resetStage() { $('#v-player').classList.add('has-media'); this.setLoading(true); try { $('#pframe').contentWindow.postMessage({t: 'reset'}, '*'); } catch (e) {} },
+  resetStage() { $('#v-player').classList.add('has-media'); this.setLoading(true); this.pmsg({t: 'reset'}); },
+  pmsg(m) { for (const id of ['#pframe', '#ppanel']) { try { $(id).contentWindow.postMessage(m, '*'); } catch (e) {} } },
   syncVideo() {
     if (this._vrq) return;
     this._vrq = requestAnimationFrame(() => {
@@ -442,8 +444,8 @@ const App = {
   },
   bindPlayer() {
     new ResizeObserver(() => this.syncVideo()).observe($('#pframe'));
-    addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true});
-    addEventListener('message', e => { if (e.data && e.data.t === 'idle') { $('#v-player').classList.remove('has-media'); this.setLoading(false); } if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; $('#pstage').classList.toggle('live', this.vOn); if (this.vOn) this.setLoading(false); this.syncVideo(); } });
+    addEventListener('resize', () => this.syncVideo()); addEventListener('scroll', () => this.syncVideo(), {passive: true, capture: true});
+    addEventListener('message', e => { if (e.data && e.data.t === 'idle') { $('#v-player').classList.remove('has-media'); this.setLoading(false); } if (e.data && e.data.t === 'player-fs') this.playerFs(); if (e.data && e.data.t === 'dbg') { try { $('#pframe').contentWindow.postMessage(e.data, '*'); } catch (_) {} } if (e.data && e.data.t === 'video-on') { this.vOn = !!e.data.on; if (this.vOn) $('#v-player').classList.add('has-media'); $('#pstage').classList.toggle('live', this.vOn); if (this.vOn) this.setLoading(false); this.syncVideo(); } });
   },
 
   /* ---------- players ---------- */

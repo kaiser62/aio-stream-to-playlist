@@ -6,6 +6,9 @@
   const MOCK = new URLSearchParams(location.search).has('mock');
   const EMBED = new URLSearchParams(location.search).has('embed');
   if (EMBED) document.documentElement.classList.add('embed');
+  // PANEL: a second instance of this page that only shows the settings/playlist sidebar, docked below the player
+  const PANEL = new URLSearchParams(location.search).has('panel');
+  if (PANEL) document.documentElement.classList.add('panel');
   const setGlass = (on) => document.documentElement.classList.toggle('pglass', !!on);
   { let g = '1'; try { g = localStorage.getItem('ui.glass.player') || '1'; } catch (e) {} setGlass(g === '1'); }
   const T = window.__TAURI__ || (EMBED && window.parent && window.parent.__TAURI__) || undefined;
@@ -199,7 +202,7 @@
     clearTimeout(videoOn.t);
     const set = (v) => {
       document.body.classList.toggle('video-on', v);
-      if (EMBED && videoOn.last !== v) { videoOn.last = v; try { parent.postMessage({ t: 'video-on', on: v }, '*'); } catch (e) {} }
+      if (EMBED && !PANEL && videoOn.last !== v) { videoOn.last = v; try { parent.postMessage({ t: 'video-on', on: v }, '*'); } catch (e) {} }
     };
     if (!on) set(false); else videoOn.t = setTimeout(() => set(true), 220); // let mpv draw its first frame before the page opens the hole
   }
@@ -235,6 +238,7 @@
   const tabState = { playlist: 'playlist', settings: 'video' };
   const TABS = { playlist: [['playlist', 'Playlist'], ['chapters', 'Chapters']], settings: [['video', 'Video'], ['audio', 'Audio'], ['sub', 'Subtitles']] };
   function toggleSidebar(mode) {
+    if (PANEL) return;
     const open = sidebarMode === mode;
     sidebarMode = open ? null : mode;
     document.body.classList.toggle('sidebar-open', !!sidebarMode);
@@ -244,6 +248,7 @@
   }
   function renderSidebar() {
     if (!sidebarMode) return;
+    if (PANEL && document.activeElement && document.activeElement.tagName === 'SELECT' && !renderSidebar.force) return;
     const tabs = $('#sb-tabs'); tabs.innerHTML = '';
     for (const [id, label] of TABS[sidebarMode]) {
       const b = el('button', tabState[sidebarMode] === id ? 'on' : '', esc(label));
@@ -253,7 +258,7 @@
     const body = $('#sb-body'); const keep = body.scrollTop; body.innerHTML = '';
     const tab = tabState[sidebarMode];
     if (tab === 'playlist') sbPlaylist(body); else if (tab === 'chapters') sbChapters(body);
-    else if (tab === 'video') sbVideo(body); else if (tab === 'audio') sbAudio(body); else sbSub(body);
+    else if (tab === 'effects') sbEffects(body); else if (tab === 'video') sbVideo(body); else if (tab === 'audio') sbAudio(body); else sbSub(body);
     body.scrollTop = keep;
   }
   function sbPlaylist(body) {
@@ -304,32 +309,50 @@
     blend: [['video-sync', 'display-resample'], ['tscale', 'linear'], ['interpolation', true]] };
   const saveFx = () => { try { localStorage.setItem('player.fx', JSON.stringify(FX)); } catch (e) {} };
   function applyFx(only) {
+    if (!only) { if (PANEL) return; try { Object.assign(FX, JSON.parse(localStorage.getItem('player.fx') || '{}')); } catch (e) {} } // the dock instance owns the settings; this one just applies them on file start
     if (!only || only === 'a4k') invoke('player_filter', { preset: FX.a4k }).catch(() => {});
     if (!only || only === 'smooth') for (const [k, v] of SMOOTH[FX.smooth] || SMOOTH.off) setProp(k, v);
-    if (!only || only === 'fps' || only === 'fpsMode') invoke('player_fps', { target: FX.fps, mode: FX.fpsMode }).catch(() => {});
+    if (!only || only === 'fps' || only === 'fpsMode') invoke('player_fps', { target: FX.fps, mode: FX.fpsMode, height: ((P['video-params'] || {}).h) || null }).catch(() => {});
     if (!only || only === 'deband') setProp('deband', !!FX.deband);
     if (!only || only === 'scale') { const m = { default: ['bilinear', 'bilinear'], sharp: ['ewa_lanczossharp', 'mitchell'], spline: ['spline36', 'mitchell'] }[FX.scale] || []; if (m.length) { setProp('scale', m[0]); setProp('dscale', m[1]); } }
   }
   const setFx = (k, v) => { FX[k] = v; saveFx(); applyFx(k); };
+  // Frame-modifying settings: one button that holds a set of dropdowns, with the chosen values summarised as text under it.
+  // Shown in the dock below the player (embedded) instead of the OSD sidebar.
+  let fxOpen = false;
+  const FX_OPTS = [
+    ['a4k', 'Upscaling (Anime4K)', 'Upscaling', [['Off', 'off'], ['A · HQ', 'a-hq'], ['B · HQ', 'b-hq'], ['C · HQ', 'c-hq'], ['A · Fast', 'a-fast'], ['B · Fast', 'b-fast'], ['C · Fast', 'c-fast']]],
+    ['smooth', 'Motion smoothing', 'Smoothing', [['Off', 'off'], ['Light', 'light'], ['Blend', 'blend']]],
+    ['fps', 'Target frame rate', 'Frame rate', [['Display', 0], ['60', 60], ['90', 90], ['120', 120]]],
+    ['fpsMode', 'Frame method', 'Method', [['Blend (light)', 'blend'], ['Motion-comp (heavy)', 'mci']]],
+    ['scale', 'Scaler', 'Scaler', [['Default', 'default'], ['Sharp', 'sharp'], ['Spline36', 'spline']]],
+    ['deband', 'Deband', 'Deband', [['Off', false], ['On', true]]],
+  ];
+  const fxLabel = (k) => { const d = FX_OPTS.find((o) => o[0] === k); const o = d[3].find((x) => String(x[1]) === String(FX[k])); return o ? o[0] : String(FX[k]); };
+  function sbEffects(body) {
+    const s = el('div', 'fx-wrap'); body.appendChild(s);
+    const btn = el('button', 'fx-btn', I('<path d="M4 8h9M17 8h3M4 16h3M11 16h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="15" cy="8" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="16" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/>') + '<span>Frame settings</span><i class="fx-chev"></i>');
+    btn.setAttribute('aria-expanded', fxOpen); btn.onclick = () => { fxOpen = !fxOpen; renderSidebar(); };
+    s.appendChild(btn);
+    const sum = el('div', 'fx-sum');
+    sum.innerHTML = FX_OPTS.filter((o) => o[0] !== 'fpsMode' || FX.fps).map((o) => `<span><b>${esc(o[2])}</b> ${esc(fxLabel(o[0]))}</span>`).join('');
+    s.appendChild(sum);
+    if (!fxOpen) return;
+    const grid = el('div', 'fx-grid');
+    for (const [k, label, , opts] of FX_OPTS) {
+      const row = el('label', 'fx-row'); row.appendChild(el('span', '', esc(label)));
+      const sel = el('select'); sel.setAttribute('aria-label', label);
+      for (const [t, v] of opts) { const o = el('option', '', esc(t)); o.value = String(v); if (String(FX[k]) === String(v)) o.selected = true; sel.appendChild(o); }
+      sel.onchange = () => { const v = opts.find((x) => String(x[1]) === sel.value)[1]; setFx(k, v); sel.blur(); setTimeout(renderSidebar, 30); };
+      row.appendChild(sel); grid.appendChild(row);
+    }
+    s.appendChild(grid);
+    s.appendChild(el('div', 'sb-empty sb-hint', 'A: clean anime / B: compressed / C: upscale + denoise. Frame rate synthesizes frames on the CPU; Motion-comp downsizes sources above 1080p. 90 and 120 need a display that can show them.'));
+  }
   function sbVideo(body) {
     let s = secHead(body, 'Playback');
     sliderRow(s, 'Speed', { min: 0.25, max: 4, step: 0.05, get: () => P.speed || 1, set: (v) => { P.speed = v; setProp('speed', v); renderSpeed(); }, fmtv: (v) => v + 'x' });
-    s = secHead(body, 'Upscaling (Anime4K)');
-    chips(s, [['Off', 'off'], ['A · HQ', 'a-hq'], ['B · HQ', 'b-hq'], ['C · HQ', 'c-hq'], ['A · Fast', 'a-fast'], ['B · Fast', 'b-fast'], ['C · Fast', 'c-fast']], FX.a4k, (v) => setFx('a4k', v));
-    s.appendChild(el('div', 'sb-empty sb-hint', 'A: clean anime / B: compressed / C: upscale + denoise. Fast presets suit weaker GPUs.'));
-    s = secHead(body, 'Motion smoothing');
-    chips(s, [['Off', 'off'], ['Light', 'light'], ['Blend', 'blend']], FX.smooth, (v) => setFx('smooth', v));
-    s.appendChild(el('div', 'sb-empty sb-hint', 'Frame interpolation in mpv. Motion-compensated (SVP/RIFE) needs VapourSynth.'));
-    s = secHead(body, 'Target frame rate');
-    chips(s, [['Display', 0], ['60', 60], ['90', 90], ['120', 120]], FX.fps, (v) => setFx('fps', +v));
-    chips(s, [['Blend (light)', 'blend'], ['Motion-comp (heavy)', 'mci']], FX.fpsMode, (v) => setFx('fpsMode', v));
-    s.appendChild(el('div', 'sb-empty sb-hint', 'Synthesizes frames on the CPU with FFmpeg. 90 and 120 need a display that can show them; motion-comp may stutter at high resolutions.'));
-    s = secHead(body, 'Scaler');
-    chips(s, [['Default', 'default'], ['Sharp', 'sharp'], ['Spline36', 'spline']], FX.scale, (v) => setFx('scale', v));
-    const drow = el('div', 'qs-row'); drow.appendChild(el('label', '', 'Deband'));
-    const dsw = el('button', 'switch'); dsw.setAttribute('role', 'switch'); dsw.setAttribute('aria-checked', !!FX.deband);
-    dsw.onclick = () => { setFx('deband', !FX.deband); setTimeout(renderSidebar, 60); };
-    drow.appendChild(dsw); s.appendChild(drow);
+    if (!EMBED) sbEffects(body);
     const grow = el('div', 'qs-row'); grow.appendChild(el('label', '', 'Debug overlay (I)'));
     const gsw = el('button', 'switch'); gsw.setAttribute('role', 'switch'); gsw.setAttribute('aria-checked', dbgOn);
     gsw.onclick = () => { setDbg(!dbgOn); setTimeout(renderSidebar, 60); };
@@ -489,6 +512,7 @@
   }
   function placeOsd() { osdBox.style.top = dbgOn ? (dbg.offsetHeight + 28) + 'px' : ''; }   // keep the OSD card below the debug panel
   function setDbg(on, save = true) {
+    if (PANEL && save) { try { parent.postMessage({ t: 'dbg', on: !!on }, '*'); } catch (_) {} }
     dbgOn = !!on; dbg.hidden = !dbgOn; renderDbg(); placeOsd();
     if (save) try { localStorage.setItem('player.dbg', dbgOn ? '1' : '0'); } catch (_) {}
     document.querySelectorAll('[data-dbg]').forEach((b) => b.classList.toggle('on', dbgOn));
@@ -544,11 +568,11 @@
   function resetIdle() {
     for (const k of Object.keys(P)) delete P[k];
     document.body.classList.remove('video-on'); document.body.classList.add('idle');
-    if (EMBED) parent.postMessage({ t: 'idle' }, '*');
+    if (EMBED && !PANEL) parent.postMessage({ t: 'idle' }, '*');
     renderPlay(); renderTime(); renderVolume(); renderSpeed(); renderTitle(); renderNav(); renderTicks();
-    if (sidebarMode) toggleSidebar(sidebarMode);
+    if (sidebarMode && !PANEL) toggleSidebar(sidebarMode);
   }
-  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'glass') setGlass(e.data.on); if (e.data && e.data.t === 'glass-op') document.documentElement.style.setProperty('--gl', e.data.v / 100); if (e.data && e.data.t === 'reset') { delete P.path; delete P['video-params']; videoOn(); }
+  window.addEventListener('message', (e) => { if (e.data && e.data.t === 'glass') setGlass(e.data.on); if (e.data && e.data.t === 'dbg') setDbg(e.data.on, false); if (e.data && e.data.t === 'glass-op') document.documentElement.style.setProperty('--gl', e.data.v / 100); if (e.data && e.data.t === 'reset') { delete P.path; delete P['video-params']; videoOn(); }
     if (e.data && e.data.t === 'fs-state') { fs = !!e.data.on; osd('fs', fs ? 'Fullscreen' : 'Windowed'); } });
 
   // ------------------------------------------------------------------ events from Rust
@@ -601,5 +625,9 @@
     setInterval(() => { if (!P.pause) mockSet('time-pos', Math.min(P.duration, (P['time-pos'] || 0) + 0.1 * (P.speed || 1))); }, 100);
   }
 
+  if (PANEL) {
+    TABS.settings = [['effects', 'Frame effects']]; tabState.settings = 'effects';
+    sidebarMode = 'settings'; document.body.classList.add('sidebar-open'); renderSidebar();
+  }
   boot();
 })();
