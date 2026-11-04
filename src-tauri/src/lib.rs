@@ -300,6 +300,10 @@ async fn fetch_streams(st: State<'_, AppState>, kind: String, imdb: String, seas
     if list.iter().all(|a| !a.enabled) {
         return Err("No addons enabled. Add one in the Addons tab.".into());
     }
+    let probe = if kind == "movie" { imdb.clone() } else { format!("{imdb}:1:1") };
+    if !list.iter().any(|a| a.enabled && addons::supports(&a.manifest, "stream", &kind, &probe)) {
+        return Err("None of your enabled addons provides streams (Cinemeta only has titles). Add a stream addon such as AIOStreams or Torrentio in the Addons tab.".into());
+    }
     let (mut streams, mut errors, mut health) = (Vec::new(), Vec::new(), Vec::new());
     if kind == "movie" {
         let r = addons::fetch_streams(&st.client, &list, "movie", &imdb, None, None).await;

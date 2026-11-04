@@ -350,7 +350,7 @@ const App = {
     const hid = total && this.view.length < total && on.length ? ` · filters on: ${on.join(', ')}` : '';
     $('#rstatus').textContent = total ? `${this.view.length} of ${total} streams shown${hid}${errs}` : (this.fetched ? `0 streams found${errs}` : 'Nothing fetched yet.');
     $('#fbtn').hidden = $('#sort').closest('label').hidden = !total;
-    if (!total && this.fetched) { $('#rlist').innerHTML = stateBox('results', 'No streams found', 'Your addons returned nothing for this title. It may be unreleased or not indexed yet. Try another title or check the Addons tab.', {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
+    if (!total && this.fetched) { $('#rlist').innerHTML = stateBox('results', 'No streams found', 'Your addons returned nothing for this title. It may be unreleased or not indexed yet. Try another title or check the Addons tab.' + (this.errors?.length ? ' Addon errors: ' + this.errors.slice(0, 3).join('; ') : ''), {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
     if (!total) { $('#rlist').innerHTML = stateBox('results', 'No results yet', 'Search for a title and fetch streams to see them here.', {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
     if (!this.view.length) { $('#rlist').innerHTML = stateBox('filter', 'Nothing matches your filters', 'Loosen the resolution, size or cached-only filters.', {action: ['Reset filters', 'resetf']}); return this.updateBar(); }
     let last = null;
