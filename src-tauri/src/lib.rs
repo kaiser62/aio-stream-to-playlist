@@ -1,7 +1,11 @@
+#[cfg(desktop)]
+mod player;
+
 use companion_core::{
     addons::{self, Addon},
     config::{self, Config},
     jobs::{self, Job, SendItem},
+    player::{KeyInfo, PlayerCmd},
     playlist::{self, Entry, PlaylistInfo},
     torbox::{self, TorBox},
 };
@@ -371,6 +375,53 @@ fn open_playlist(_file: String, _player: Option<String>) -> Result<(), String> {
     Err("Opening a player directly is not available on mobile yet; use Copy or Export".into())
 }
 
+// ------------------------------------------------------------------ built-in player (mpv)
+#[cfg(desktop)]
+#[tauri::command]
+fn player_open(app: tauri::AppHandle, st: State<AppState>, name: Option<String>, file: Option<String>, index: Option<usize>) -> Result<(), String> {
+    let f = name.or(file).ok_or("no playlist given")?;
+    let entries = playlist::read(&st.playlists(), &f).map_err(|e| e.to_string())?;
+    if entries.is_empty() {
+        return Err("playlist is empty".into());
+    }
+    player::open(&app, &st.dir, &entries, index.unwrap_or(0).min(entries.len() - 1))
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn player_cmd(cmd: String, arg: Option<f64>) -> Result<(), String> {
+    let c = PlayerCmd::from_name(&cmd, arg).ok_or_else(|| format!("unknown player command: {cmd}"))?;
+    player::command(&c)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn player_close() {
+    player::close()
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_open(_name: Option<String>, _file: Option<String>, _index: Option<usize>) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_cmd(_cmd: String, _arg: Option<f64>) -> Result<(), String> {
+    Err("The built-in player is not available on mobile yet".into())
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn player_close() {}
+
+/// Keyboard shortcuts for a help overlay.
+#[tauri::command]
+fn player_keys() -> Vec<KeyInfo> {
+    companion_core::player::key_list()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -386,7 +437,8 @@ pub fn run() {
             config_get, config_set, addons_list, addons_add, addons_update, addons_remove, addons_reorder,
             addons_refresh, addon_url, addons_export, addons_import, addons_seed, addon_configure,
             search, fetch_streams, send, job_get, library, playlists_list, playlist_read, playlist_text,
-            playlist_save, playlist_delete, playlist_export, open_playlist
+            playlist_save, playlist_delete, playlist_export, open_playlist,
+            player_open, player_cmd, player_close, player_keys
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

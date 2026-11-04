@@ -13,3 +13,5 @@ build/target/
 build/node/
 build/downloads/
 build/dist/
+.agent/skills/*/__pycache__/
+**/__pycache__/

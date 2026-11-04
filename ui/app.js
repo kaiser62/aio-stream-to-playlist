@@ -1,9 +1,14 @@
 'use strict';
-const invoke = (c, a) => window.__TAURI__.core.invoke(c, a);
+const invoke = (c, a) => { try { return window.__TAURI__.core.invoke(c, a); } catch (e) { return Promise.reject(e); } };
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const gb = b => b ? (b / 1073741824).toFixed(2) + ' GB' : '—';
+const ic = (n, cls = '') => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const hue = s => { let h = 0; for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const initial = s => (String(s || '?').replace(/^(the|a|an)\s+/i, '').trim()[0] || '?').toUpperCase();
+const stateBox = (icon, title, text, o = {}) => `<div class="state ${o.err ? 'err' : ''}"><div class="art">${ic(icon)}</div><h4>${esc(title)}</h4>${text ? `<p>${esc(text)}</p>` : ''}${o.action ? `<button class="btn ${o.err ? '' : 'primary'}" data-act="${esc(o.action[1])}">${esc(o.action[0])}</button>` : ''}</div>`;
+const skeleton = (n, cls) => Array.from({length: n}, () => `<div class="sk ${cls}"></div>`).join('');
 const UA = navigator.userAgent;
 const PLAT = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios'
   : /Android/.test(UA) ? 'android' : /Win/.test(UA) ? 'windows' : /Mac/.test(UA) ? 'mac' : 'other';
@@ -27,17 +32,41 @@ const App = {
       if (p === '/api/playlist') return {entries: await invoke('playlist_read', {file: q.get('file')})};
       if (p === '/api/playlist/save') return {file: await invoke('playlist_save', {name: body.name, old: body.old || null, entries: body.entries})};
       if (p === '/api/playlist/delete') { await invoke('playlist_delete', {file: body.file}); return {ok: true}; }
+      if (p === '/api/player/open') { await invoke('player_open', {name: body.name}); return {ok: true}; }
+      if (p === '/api/player/cmd') return {ok: true, result: await invoke('player_cmd', {cmd: body.cmd, arg: body.arg ?? null})};
       return {error: 'unknown call ' + p};
     } catch (e) { return {error: String(e)}; }
   },
-  toast(msg, ms = 2600) {
-    const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  toast(msg, ms = 2600, tone = '') {
+    const t = $('#toast'); t.className = 'toast ' + tone;
+    t.innerHTML = (tone === 'bad' ? ic('alert') : '') + `<span>${esc(msg)}</span>`; t.hidden = false;
     clearTimeout(this._t); this._t = setTimeout(() => t.hidden = true, ms);
   },
+  err(e, ms = 4500) { this.toast(String(e && e.error ? e.error : e), ms, 'bad'); },
+
+  /* promise-based replacement for confirm()/prompt(): works in every webview */
+  ask({title, msg = '', ok = 'OK', danger = false, input = null}) {
+    return new Promise(res => {
+      const m = $('#modal'), inp = $('#m-input'), okb = $('#m-ok'), prev = document.activeElement;
+      $('#m-title').textContent = title; $('#m-msg').textContent = msg; okb.textContent = ok;
+      okb.classList.toggle('danger-fill', danger);
+      inp.hidden = input === null; if (input !== null) { inp.value = input.value ?? ''; inp.placeholder = input.placeholder || ''; inp.setAttribute('aria-label', title); }
+      m.hidden = false; (input === null ? okb : inp).focus();
+      const done = v => { m.hidden = true; okb.onclick = $('#m-cancel').onclick = m.onkeydown = m.onclick = null; prev && prev.focus && prev.focus(); res(v); };
+      okb.onclick = () => done(input === null ? true : inp.value);
+      $('#m-cancel').onclick = () => done(input === null ? false : null);
+      m.onclick = e => { if (e.target === m) $('#m-cancel').onclick(); };
+      m.onkeydown = e => { if (e.key === 'Escape') $('#m-cancel').onclick(); else if (e.key === 'Enter' && input !== null) okb.onclick(); };
+    });
+  },
+
   show(v) {
     $$('main > section').forEach(s => s.hidden = s.id !== 'v-' + v);
-    $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-    try { history.replaceState(null, '', '#' + v); } catch (e) {}
+    $$('#nav button').forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'); });
+    $('.shell').classList.remove('nav-open'); $('#railtog').setAttribute('aria-expanded', 'false');
+    $('#v-results').classList.remove('fopen-m');
+    try { history.replaceState(null, '', location.search + '#' + v); } catch (e) {}
+    if (v === 'find') this.refreshKeyBanner();
     if (v === 'library') this.loadLibrary();
     if (v === 'addons') this.loadAddons();
     if (v === 'playlists') this.loadPlaylists();
@@ -45,27 +74,53 @@ const App = {
     window.scrollTo(0, 0);
   },
 
+  setTheme(t) {
+    try { t === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', t); } catch (e) {}
+    t === 'auto' ? document.documentElement.removeAttribute('data-theme') : document.documentElement.dataset.theme = t;
+    $$('#themeseg button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  },
+
   async init() {
     $('#app').hidden = false;
+    let th = 'auto'; try { th = localStorage.getItem('theme') || 'auto'; } catch (e) {}
+    this.setTheme(th);
     this.bind();
+    if (matchMedia('(min-width:1100px)').matches) $('#v-results').classList.add('fopen');
     invoke('addons_seed').catch(() => {});
     const c = await invoke('config_get').catch(() => ({}));
+    this.hasKey = !!c.has_key;
     const h = location.hash.slice(1);
+    this.renderResults();
+    this.renderHitsEmpty();
     this.show(['find', 'results', 'addons', 'library', 'playlists', 'settings'].includes(h) ? h : (c.has_key ? 'find' : 'settings'));
+  },
+
+  async refreshKeyBanner() {
+    const c = await invoke('config_get').catch(() => ({}));
+    this.hasKey = !!c.has_key; $('#keybanner').hidden = this.hasKey;
   },
 
   bind() {
     $$('#nav button').forEach(b => b.onclick = () => this.show(b.dataset.v));
+    document.addEventListener('click', e => { const g = e.target.closest('[data-goto]'); if (g) this.show(g.dataset.goto); });
+    $('#railtog').onclick = () => { const sh = $('.shell'); sh.classList.toggle('nav-open'); $('#railtog').setAttribute('aria-expanded', sh.classList.contains('nav-open')); };
+    $('#navscrim').onclick = () => { $('.shell').classList.remove('nav-open'); $('#railtog').setAttribute('aria-expanded', 'false'); };
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('.shell').classList.remove('nav-open'); $('#v-results').classList.remove('fopen-m'); if (!matchMedia('(min-width:1100px)').matches) $('#v-results').classList.remove('fopen'); } });
     $$('#kindseg button').forEach(b => b.onclick = () => {
       this.kind = b.dataset.k;
       $$('#kindseg button').forEach(x => x.classList.toggle('on', x === b));
       $('#epcard').hidden = this.kind !== 'series';
-      $('#hits').innerHTML = ''; this.title = null;
+      this.renderHitsEmpty(); this.title = null;
     });
     $('#qgo').onclick = () => this.search();
     $('#q').onkeydown = e => { if (e.key === 'Enter') this.search(); };
+    $('#imdb').onkeydown = e => { if (e.key === 'Enter') this.fetchStreams(); };
     $('#fetchgo').onclick = () => this.fetchStreams();
-    $('#fbtn').onclick = () => { const f = $('#filters'); f.hidden = !f.hidden; };
+    const rs = $('#v-results'), fb = $('#fbtn');
+    const setF = on => { rs.classList.toggle('fopen', on); fb.setAttribute('aria-expanded', on); };
+    fb.setAttribute('aria-expanded', rs.classList.contains('fopen'));
+    fb.onclick = () => setF(!rs.classList.contains('fopen'));
+    $('#fclose').onclick = () => setF(false); $('#fscrim').onclick = () => setF(false);
     $('#freset').onclick = () => this.resetFilters();
     ['#sort', '#f-res', '#f-max', '#f-min', '#f-seeds', '#f-ex', '#f-in', '#f-cached', '#f-best']
       .forEach(s => $(s).addEventListener('input', () => this.applyFilters()));
@@ -76,39 +131,58 @@ const App = {
     $('#libq').oninput = () => this.renderLibrary();
     $('#libgo').onclick = () => this.buildFromLibrary();
     $('#s-save').onclick = () => this.saveSettings();
+    $('#s-eye').onclick = () => { const k = $('#s-key'), show = k.type === 'password'; k.type = show ? 'text' : 'password'; $('#s-eye').innerHTML = ic(show ? 'eyeoff' : 'eye'); $('#s-eye').setAttribute('aria-label', show ? 'Hide key' : 'Show key'); };
+    $$('#themeseg button').forEach(b => b.onclick = () => this.setTheme(b.dataset.t));
+    $$('#subnav button').forEach(b => b.onclick = () => {
+      $$('#subnav button').forEach(x => x.classList.toggle('on', x === b));
+      $$('.sgroup').forEach(g => g.hidden = g.id !== 's-' + b.dataset.s);
+    });
     $('#ad-add').onclick = () => this.addAddon();
     $('#ad-url').onkeydown = e => { if (e.key === 'Enter') this.addAddon(); };
-    $('#ad-refresh').onclick = async () => { for (const a of this.addons || []) await invoke('addons_refresh', {id: a.id}).catch(() => {}); this.loadAddons(); };
+    $('#ad-refresh').onclick = async () => {
+      const b = $('#ad-refresh'); b.disabled = true;
+      for (const a of this.addons || []) await invoke('addons_refresh', {id: a.id}).catch(() => {});
+      b.disabled = false; this.loadAddons();
+    };
     $('#ad-export').onclick = () => this.exportAddons();
     $('#ad-import').onclick = () => this.importAddons();
+    document.addEventListener('click', e => { const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'resetf') this.resetFilters(); else if (a.dataset.act === 'goto-find') this.show('find'); else if (a.dataset.act === 'retry-lib') this.loadLibrary(); });
   },
 
   /* ---------- FIND ---------- */
+  renderHitsEmpty() {
+    $('#hits').innerHTML = stateBox('film', this.kind === 'movie' ? 'Find a movie' : 'Find a series', 'Search by title above, or paste an IMDb id below.');
+  },
   async search() {
-    const q = $('#q').value.trim(); if (!q) return;
-    $('#hits').innerHTML = '<p class="mut">Searching…</p>';
+    const q = $('#q').value.trim(); if (!q) return $('#q').focus();
+    $('#hits').innerHTML = skeleton(6, 'sk-hit');
     const r = await this.api('/api/search', {query: q, kind: this.kind});
-    if (r.error) return $('#hits').innerHTML = `<p class="bad">${esc(r.error)}</p>`;
-    $('#hits').innerHTML = r.results.map((h, i) => `<div class="hit" data-i="${i}">
-      ${h.poster ? `<img loading="lazy" src="${esc(h.poster)}" alt="">` : '<img alt="">'}
-      <div><div>${esc(h.name)}</div><div class="mut">${esc(h.year || '')} · ${esc(h.id)}</div></div></div>`).join('') || '<p class="mut">No matches.</p>';
+    if (r.error) return $('#hits').innerHTML = stateBox('alert', 'Search failed', r.error, {err: true});
+    $('#hits').innerHTML = r.results.map((h, i) => `<button class="hit" data-i="${i}" style="--i:${i};--h:${hue(h.name)}">
+      <div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img loading="lazy" src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
+      <div class="hit-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div></button>`).join('')
+      || stateBox('search', 'No matches', 'Try another spelling, or paste the IMDb id directly.');
     $$('#hits .hit').forEach(el => el.onclick = () => {
       const h = r.results[+el.dataset.i]; this.title = h; $('#imdb').value = h.id;
-      $('#plname').value = h.name; $('#hits').innerHTML = `<div class="hit picked"><div><b>${esc(h.name)}</b> <span class="mut">${esc(h.year || '')} · ${esc(h.id)}</span></div></div>`;
+      $('#plname').value = h.name;
+      $('#hits').innerHTML = `<div class="picked" style="--h:${hue(h.name)}"><div class="poster"><b>${esc(initial(h.name))}</b>${h.poster ? `<img src="${esc(h.poster)}" alt="" onerror="this.remove()">` : ''}</div>
+        <div class="pk-t"><b>${esc(h.name)}</b><span>${esc(h.year || '')} · ${esc(h.id)}</span></div><span class="check">${ic('check')}</span></div>`;
     });
   },
   async fetchStreams() {
-    const id = $('#imdb').value.trim();
-    if (!/^tt\d+$/.test(id)) return $('#fstatus').textContent = 'Pick a title or enter an IMDb id like tt1375666.';
-    $('#fstatus').textContent = 'Fetching from AIOStreams… (can take a while for many episodes)';
+    const id = $('#imdb').value.trim(), st = $('#fstatus');
+    st.classList.remove('err');
+    if (!/^tt\d+$/.test(id)) { st.classList.add('err'); st.textContent = 'Pick a title or enter an IMDb id like tt1375666.'; return $('#imdb').focus(); }
+    st.innerHTML = '<span class="spin"></span>Fetching from your addons… (can take a while for many episodes)';
     $('#fetchgo').disabled = true;
     try {
       const r = await this.api('/api/fetch', {kind: this.kind, imdb: id, season: +$('#season').value, ep1: +$('#ep1').value, ep2: +$('#ep2').value});
-      if (r.error) return $('#fstatus').innerHTML = `<span class="bad">${esc(r.error)}</span>`;
+      if (r.error) { st.classList.add('err'); return st.textContent = r.error; }
       this.streams = r.streams.map((s, i) => ({...s, _id: i}));
       this.errors = r.errors || [];
       this.sel.clear(); this.buildChips(); this.applyFilters(true);
-      $('#fstatus').textContent = `${this.streams.length} streams fetched.`;
+      st.textContent = `${this.streams.length} streams fetched.`;
       this.show('results');
     } finally { $('#fetchgo').disabled = false; }
   },
@@ -122,8 +196,8 @@ const App = {
       $$('.chip', box).forEach(c => c.remove());
       this.chips[key] = new Set();
       vals.forEach(v => {
-        const c = document.createElement('button'); c.className = 'chip'; c.textContent = v;
-        c.onclick = () => { const s = this.chips[key]; s.has(v) ? s.delete(v) : s.add(v); c.classList.toggle('on'); this.applyFilters(); };
+        const c = document.createElement('button'); c.className = 'chip'; c.textContent = v; c.setAttribute('aria-pressed', 'false');
+        c.onclick = () => { const s = this.chips[key]; s.has(v) ? s.delete(v) : s.add(v); c.classList.toggle('on'); c.setAttribute('aria-pressed', s.has(v)); this.applyFilters(); };
         box.append(c);
       });
       box.hidden = !vals.length;
@@ -132,7 +206,7 @@ const App = {
   resetFilters() {
     $('#f-res').value = 1080; $('#f-max').value = 0; $('#f-min').value = 0; $('#f-seeds').value = 0;
     $('#f-ex').value = 'cam,telesync,hdts'; $('#f-in').value = ''; $('#f-cached').checked = true; $('#f-best').checked = true;
-    $$('.chip.on').forEach(c => c.classList.remove('on')); Object.values(this.chips).forEach(s => s.clear());
+    $$('.chip.on').forEach(c => { c.classList.remove('on'); c.setAttribute('aria-pressed', 'false'); }); Object.values(this.chips).forEach(s => s.clear());
     this.applyFilters();
   },
   applyFilters(keepSel) {
@@ -168,21 +242,31 @@ const App = {
   renderResults() {
     const total = this.streams.length;
     $('#rcount').hidden = !total; $('#rcount').textContent = this.view.length;
-    $('#rstatus').textContent = total ? `${this.view.length} of ${total} shown` + (this.errors?.length ? ` · ${this.errors.length} episode errors: ${this.errors.slice(0, 2).join('; ')}` : '') : 'Nothing fetched yet — use Find.';
-    $('#rlist').innerHTML = this.view.map(s => `<label class="item ${this.sel.has(s._id) ? 'sel' : ''}">
-      <input type="checkbox" data-id="${s._id}" ${this.sel.has(s._id) ? 'checked' : ''}>
+    $('#rtitle').textContent = this.title?.name || 'Results';
+    const errs = this.errors?.length ? ` · ${this.errors.length} episode error${this.errors.length === 1 ? '' : 's'}: ${this.errors.slice(0, 2).join('; ')}` : '';
+    $('#rstatus').textContent = total ? `${this.view.length} of ${total} streams shown${errs}` : 'Nothing fetched yet.';
+    $('#fbtn').hidden = $('#sort').closest('label').hidden = !total;
+    if (!total) { $('#rlist').innerHTML = stateBox('results', 'No results yet', 'Search for a title and fetch streams to see them here.', {action: ['Go to Search', 'goto-find']}); return this.updateBar(); }
+    if (!this.view.length) { $('#rlist').innerHTML = stateBox('filter', 'Nothing matches your filters', 'Loosen the resolution, size or cached-only filters.', {action: ['Reset filters', 'resetf']}); return this.updateBar(); }
+    let last = null;
+    $('#rlist').innerHTML = this.view.map((s, n) => {
+      let head = '';
+      if (s.season != null) { const k = s.season + ':' + s.episode; if (k !== last) { head = `<div class="ep-head">Season ${s.season} · Episode ${s.episode}</div>`; last = k; } }
+      const rr = s.res_rank >= 2160 ? 'r4k' : s.res_rank === 1080 ? 'r1080' : '';
+      return head + `<label class="item ${this.sel.has(s._id) ? 'sel' : ''}" style="--i:${n}">
+      <input class="chk" type="checkbox" data-id="${s._id}" ${this.sel.has(s._id) ? 'checked' : ''}><span class="cbx">${'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>'}</span>
       <div class="body"><div class="t">${esc(s.title)}</div>
        <div class="src">${esc(s.source)}</div>
        <div class="badges">
-        ${s.season != null ? `<span class="b">S${s.season}E${s.episode}</span>` : ''}
-        ${s.resolution ? `<span class="b res">${esc(s.resolution)}</span>` : ''}
+        ${s.resolution ? `<span class="b res ${rr}">${esc(s.resolution)}</span>` : ''}
+        ${s.cached ? `<span class="b ok">${ic('check')}Cached</span>` : ''}
         ${[s.quality, s.codec, s.hdr, s.audio].filter(Boolean).map(x => `<span class="b">${esc(x)}</span>`).join('')}
         ${s.size ? `<span class="b">${gb(s.size)}</span>` : ''}
-        ${s.seeders != null ? `<span class="b">${s.seeders} seeds</span>` : ''}
+        ${s.seeders != null ? `<span class="b">${ic('seed')}${s.seeders}</span>` : ''}
         ${s.langs?.length ? `<span class="b">${esc(s.langs.join(', '))}</span>` : ''}
-        ${s.addon_name ? `<span class="b">${esc(s.addon_name)}</span>` : ''}
-        ${s.cached ? '<span class="b ok">cached</span>' : ''}
-       </div></div></label>`).join('');
+        ${s.addon_name ? `<span class="b addon" style="--h:${hue(s.addon_name)}">${esc(s.addon_name)}</span>` : ''}
+       </div></div></label>`;
+    }).join('');
     $$('#rlist input').forEach(c => c.onchange = () => {
       const id = +c.dataset.id; c.checked ? this.sel.add(id) : this.sel.delete(id);
       c.closest('.item').classList.toggle('sel', c.checked); this.updateBar();
@@ -200,147 +284,181 @@ const App = {
     const items = this.view.filter(s => this.sel.has(s._id)).map(s => ({
       title: s.title, magnet: s.magnet, url: s.url, season: s.season, episode: s.episode, add_only: $('#o-addonly').checked}));
     if (!items.length) return;
-    const {job} = await this.api('/api/send', {items, name: $('#plname').value || 'playlist', append: $('#o-append').checked});
-    this.poll(job, $('#job'));
+    $('#sendgo').disabled = true;
+    const r = await this.api('/api/send', {items, name: $('#plname').value || 'playlist', append: $('#o-append').checked});
+    this.updateBar();
+    if (r.error) return this.err(r);
+    this.poll(r.job, $('#job'));
+    $('#job').scrollIntoView({behavior: 'smooth', block: 'nearest'});
   },
   async poll(id, box) {
     const j = await this.api('/api/job/' + id);
-    box.innerHTML = '<div class="card">' + j.rows.map(r => `<div class="pl-entry"><span>${esc(r.title)}</span>
-      <span class="state-${esc(r.state)}" style="flex:none">${esc(r.state)}</span><span class="mut" style="flex:none;font-size:12px">${esc(r.detail)}</span></div>`).join('') + '</div>';
+    if (j.error) { box.innerHTML = stateBox('alert', 'Could not read job', j.error, {err: true}); return; }
+    const tone = st => /done|ok|ready|complete/.test(st) ? 'ok' : /err|fail/.test(st) ? 'bad' : st === 'queued' ? 'q' : 'run';
+    const fin = j.rows.filter(r => tone(r.state) !== 'run' && tone(r.state) !== 'q').length, pct = j.rows.length ? Math.round(fin / j.rows.length * 100) : 0;
+    box.innerHTML = `<div class="card job"><div class="job-h"><h3>${j.finished ? 'Finished' : 'Sending to TorBox…'}</h3><span>${fin}/${j.rows.length}</span></div>
+      <div class="pbar ${j.finished ? 'done' : ''}" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>` +
+      j.rows.map(r => { const t = tone(r.state); return `<div class="jrow"><span class="jdot ${t}">${t === 'ok' ? ic('check') : t === 'bad' ? ic('x') : t === 'run' ? '<span class="spin"></span>' : ''}</span>
+      <span class="jt" title="${esc(r.title)}">${esc(r.title)}</span><span class="jd state-${esc(r.state)}">${esc(r.detail || r.state)}</span></div>`; }).join('') + '</div>';
     if (!j.finished) return setTimeout(() => this.poll(id, box), 2000);
-    if (j.playlist) { box.append(this.playerButtons(j.playlist)); this.toast('Playlist ready'); }
+    if (j.playlist) { box.firstChild.append(this.playerButtons(j.playlist)); this.toast('Playlist ready'); }
   },
 
   /* ---------- players ---------- */
   playerButtons(file) {
     const wrap = document.createElement('div'); wrap.className = 'pl-actions';
     const desktop = PLAT === 'mac' || PLAT === 'windows' || PLAT === 'other';
-    let h = '<button class="btn" data-export>Export to Downloads</button><button class="btn" data-copy>Copy playlist</button>';
-    if (PLAT === 'mac') h += '<button class="btn primary" data-play="IINA">Open in IINA</button><button class="btn" data-play="VLC">VLC</button><button class="btn" data-play="mpv">mpv</button>';
-    else if (desktop) h += '<button class="btn primary" data-play="">Open in default player</button>';
+    let h = `<button class="btn primary" data-app>${ic('play')}Play in app</button>
+      <button class="btn" data-export>${ic('download')}Export to Downloads</button><button class="btn" data-copy>${ic('copy')}Copy playlist</button>`;
+    if (PLAT === 'mac') h += '<button class="btn" data-play="IINA">Open in IINA</button><button class="btn" data-play="VLC">VLC</button><button class="btn" data-play="mpv">mpv</button>';
+    else if (desktop) h += '<button class="btn" data-play="">Open in default player</button>';
     wrap.innerHTML = h;
-    wrap.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(await invoke('playlist_text', {file})); this.toast('Playlist copied'); } catch (e) { this.toast(String(e)); } };
-    wrap.querySelector('[data-export]').onclick = async () => { try { this.toast('Saved: ' + await invoke('playlist_export', {file}), 4000); } catch (e) { this.toast(String(e), 4000); } };
-    $$('[data-play]', wrap).forEach(b => b.onclick = async () => { try { await invoke('open_playlist', {file, player: b.dataset.play || null}); } catch (e) { this.toast(String(e), 4000); } });
+    wrap.querySelector('[data-app]').onclick = async () => { const r = await this.api('/api/player/open', {name: file}); if (r.error) this.err(r.error); };
+    wrap.querySelector('[data-copy]').onclick = async () => { try { await navigator.clipboard.writeText(await invoke('playlist_text', {file})); this.toast('Playlist copied'); } catch (e) { this.err(e); } };
+    wrap.querySelector('[data-export]').onclick = async () => { try { this.toast('Saved: ' + await invoke('playlist_export', {file}), 4000); } catch (e) { this.err(e); } };
+    $$('[data-play]', wrap).forEach(b => b.onclick = async () => { try { await invoke('open_playlist', {file, player: b.dataset.play || null}); } catch (e) { this.err(e); } });
     return wrap;
   },
 
   /* ---------- LIBRARY ---------- */
   async loadLibrary() {
-    $('#liblist').innerHTML = '<p class="mut">Loading…</p>';
+    $('#liblist').innerHTML = skeleton(4, 'sk-item');
     const r = await this.api('/api/torbox/library');
-    if (r.error) return $('#liblist').innerHTML = `<p class="bad">${esc(r.error)}</p>`;
+    if (r.error) return $('#liblist').innerHTML = stateBox('alert', 'Could not load your library', r.error, {err: true, action: ['Try again', 'retry-lib']});
     this.lib = r.items; this.libSel = new Set(); this.renderLibrary();
   },
   renderLibrary() {
     const q = $('#libq').value.toLowerCase();
     const items = (this.lib || []).filter(i => (i.name || '').toLowerCase().includes(q));
-    $('#liblist').innerHTML = items.map(i => `<label class="item"><input type="checkbox" data-id="${i.id}" ${this.libSel.has(i.id) ? 'checked' : ''} ${i.ready ? '' : 'disabled'}>
-      <div class="body"><div class="t">${esc(i.name)}</div><div class="badges"><span class="b">${gb(i.size)}</span><span class="b">${i.videos} video file${i.videos === 1 ? '' : 's'}</span>
-      ${i.ready ? '<span class="b ok">ready</span>' : `<span class="b">${esc(i.state || '')} ${Math.round((i.progress || 0) * 100)}%</span>`}</div>
-      ${i.ready ? '' : `<div class="pbar"><i style="width:${Math.round((i.progress || 0) * 100)}%"></i></div>`}</div></label>`).join('') || '<p class="mut">Nothing here.</p>';
-    $$('#liblist input').forEach(c => c.onchange = () => { c.checked ? this.libSel.add(+c.dataset.id) : this.libSel.delete(+c.dataset.id); });
+    $('#liblist').innerHTML = items.map((i, n) => `<label class="item ${this.libSel.has(i.id) ? 'sel' : ''}" style="--i:${n}"><input class="chk" type="checkbox" data-id="${i.id}" ${this.libSel.has(i.id) ? 'checked' : ''} ${i.ready ? '' : 'disabled'}><span class="cbx"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>
+      <div class="body"><div class="t">${esc(i.name)}</div><div class="badges"><span class="b">${gb(i.size)}</span><span class="b">${ic('film')}${i.videos} video${i.videos === 1 ? '' : 's'}</span>
+      ${i.ready ? `<span class="b ok">${ic('check')}Ready</span>` : `<span class="b">${esc(i.state || '')} ${Math.round((i.progress || 0) * 100)}%</span>`}</div>
+      ${i.ready ? '' : `<div class="pbar"><i style="width:${Math.round((i.progress || 0) * 100)}%"></i></div>`}</div></label>`).join('')
+      || (this.lib && this.lib.length ? stateBox('search', 'No matches', 'Nothing in your library matches that filter.') : stateBox('box', 'Your TorBox is empty', 'Send something from Search and it will show up here.', {action: ['Go to Search', 'goto-find']}));
+    $$('#liblist input').forEach(c => c.onchange = () => { c.checked ? this.libSel.add(+c.dataset.id) : this.libSel.delete(+c.dataset.id); c.closest('.item').classList.toggle('sel', c.checked); });
   },
   async buildFromLibrary() {
     const items = (this.lib || []).filter(i => this.libSel.has(i.id)).map(i => ({title: i.name, torrent_id: i.id, all_files: true}));
     if (!items.length) return this.toast('Select at least one');
-    const {job} = await this.api('/api/send', {items, name: $('#libname').value || 'torbox', append: false});
-    this.poll(job, $('#libjob'));
+    const r = await this.api('/api/send', {items, name: $('#libname').value || 'torbox', append: false});
+    if (r.error) return this.err(r);
+    this.poll(r.job, $('#libjob'));
   },
 
   /* ---------- PLAYLISTS ---------- */
   async loadPlaylists() {
-    $('#pledit').hidden = true;
+    $('#pledit').hidden = true; $('.pl-grid').classList.remove('has-edit');
+    $('#pllist').innerHTML = skeleton(3, 'sk-item');
     const r = await this.api('/api/playlists');
-    $('#pllist').innerHTML = r.playlists.map(p => `<div class="item"><div class="body"><div class="t">${esc(p.name)}</div>
-      <div class="src">${p.count} item${p.count === 1 ? '' : 's'} · ${new Date(p.mtime * 1000).toLocaleString()}</div></div>
-      <button class="btn sm" data-open="${esc(p.file)}">Open</button></div>`).join('') || '<p class="mut">No playlists yet.</p>';
+    if (r.error) return $('#pllist').innerHTML = stateBox('alert', 'Could not load playlists', r.error, {err: true});
+    $('#pllist').innerHTML = r.playlists.map((p, n) => `<button class="item pl-item" data-open="${esc(p.file)}" style="--i:${n}"><span class="art">${ic('playlist')}</span><div class="body"><div class="t">${esc(p.name)}</div>
+      <div class="src">${p.count} item${p.count === 1 ? '' : 's'} · ${new Date(p.mtime * 1000).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</div></div><span class="chev">${ic('chev')}</span></button>`).join('')
+      || stateBox('playlist', 'No playlists yet', 'Send streams to TorBox from Search and your playlists will appear here.', {action: ['Go to Search', 'goto-find']});
     $$('#pllist [data-open]').forEach(b => b.onclick = () => this.editPlaylist(b.dataset.open));
   },
   async editPlaylist(file) {
     const r = await this.api('/api/playlist?file=' + encodeURIComponent(file));
-    if (r.error) return this.toast(r.error);
+    if (r.error) return this.err(r);
     let entries = r.entries; const old = file.replace(/\.m3u8$/, ''); const box = $('#pledit'); box.hidden = false;
+    $('.pl-grid').classList.add('has-edit');
+    $$('#pllist .pl-item').forEach(b => b.classList.toggle('sel', b.dataset.open === file));
     const draw = () => {
-      box.innerHTML = `<div class="row"><input id="pe-name" class="grow" value="${esc(old)}"><button class="btn primary" id="pe-save">Save</button>
-        <button class="btn danger" id="pe-del">Delete</button></div><div id="pe-actions"></div>` +
-        entries.map((e, i) => `<div class="pl-entry"><span>${esc(e.title)}</span>
-          <button class="btn sm" data-up="${i}" ${i ? '' : 'disabled'}>↑</button><button class="btn sm" data-dn="${i}" ${i < entries.length - 1 ? '' : 'disabled'}>↓</button>
-          <button class="btn sm danger" data-rm="${i}">✕</button></div>`).join('');
+      box.innerHTML = `<div class="editor-h"><input id="pe-name" value="${esc(old)}" aria-label="Playlist name"><button class="btn primary" id="pe-save">Save</button>
+        <button class="btn danger" id="pe-del" aria-label="Delete playlist">${ic('trash')}</button></div>
+        <div class="mut small" style="margin-top:8px">${entries.length} item${entries.length === 1 ? '' : 's'}</div>
+        <div class="pe-list">` +
+        (entries.map((e, i) => `<div class="pl-entry"><span class="n">${i + 1}</span><span class="et">${esc(e.title)}</span>
+          <button class="icon-btn" data-up="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>${ic('up')}</button><button class="icon-btn" data-dn="${i}" aria-label="Move down" ${i < entries.length - 1 ? '' : 'disabled'}>${ic('down')}</button>
+          <button class="icon-btn danger" data-rm="${i}" aria-label="Remove">${ic('x')}</button></div>`).join('') || '<p class="mut small">This playlist is empty.</p>') + '</div><div id="pe-actions"></div>';
       $('#pe-actions').replaceWith(Object.assign(this.playerButtons(file), {id: 'pe-actions'}));
       $$('[data-up]', box).forEach(b => b.onclick = () => { const i = +b.dataset.up; [entries[i - 1], entries[i]] = [entries[i], entries[i - 1]]; draw(); });
       $$('[data-dn]', box).forEach(b => b.onclick = () => { const i = +b.dataset.dn; [entries[i + 1], entries[i]] = [entries[i], entries[i + 1]]; draw(); });
       $$('[data-rm]', box).forEach(b => b.onclick = () => { entries.splice(+b.dataset.rm, 1); draw(); });
-      $('#pe-save').onclick = async () => { const n = $('#pe-name').value || old; await this.api('/api/playlist/save', {name: n, old, entries}); this.toast('Saved'); this.loadPlaylists(); };
-      $('#pe-del').onclick = async () => { if (confirm('Delete this playlist?')) { await this.api('/api/playlist/delete', {file}); this.loadPlaylists(); } };
+      $('#pe-save').onclick = async () => { const n = $('#pe-name').value || old; const x = await this.api('/api/playlist/save', {name: n, old, entries}); if (x.error) return this.err(x); this.toast('Saved'); this.loadPlaylists(); };
+      $('#pe-del').onclick = async () => { if (await this.ask({title: 'Delete this playlist?', msg: old + ' will be removed from this device.', ok: 'Delete', danger: true})) { await this.api('/api/playlist/delete', {file}); this.loadPlaylists(); } };
     };
-    draw(); box.scrollIntoView({behavior: 'smooth'});
+    draw(); if (!matchMedia('(min-width:1000px)').matches) box.scrollIntoView({behavior: 'smooth'});
   },
 
   /* ---------- ADDONS ---------- */
   async loadAddons() {
-    this.addons = await invoke('addons_list');
+    if (!this.addons) $('#ad-list').innerHTML = skeleton(3, 'sk-item');
+    try { this.addons = await invoke('addons_list'); } catch (e) { return $('#ad-list').innerHTML = stateBox('alert', 'Could not load addons', String(e), {err: true}); }
     const L = this.addons;
-    $('#ad-list').innerHTML = L.map((a, i) => `<div class="item" data-id="${esc(a.id)}">
-      ${a.logo ? `<img src="${esc(a.logo)}" alt="" width="40" height="40" style="border-radius:8px;object-fit:cover">` : ''}
-      <div class="body"><div class="t">${esc(a.name)} <span class="mut">v${esc(a.version)}</span></div>
-       <div class="src">${esc(a.description).slice(0, 140)}</div>
-       <div class="badges">
-        <span class="b ${a.last_ok === false ? '' : a.last_ok ? 'ok' : ''}">${a.last_ok === false ? '✕ ' + esc(a.last_error || 'error') : a.last_ok ? '● ok' + (a.latency_ms != null ? ' ' + a.latency_ms + 'ms' : '') : 'untested'}</span>
-        ${a.resources.map(r => `<span class="b">${esc(r)}</span>`).join('')}${a.types.map(t => `<span class="b">${esc(t)}</span>`).join('')}
-        <span class="b">${esc(a.url_masked)}</span><span class="b">timeout ${a.timeout_secs}s</span></div>
-       <div class="pl-actions">
-        <button class="btn sm" data-a="toggle">${a.enabled ? 'Disable' : 'Enable'}</button>
-        <button class="btn sm" data-a="rename">Rename</button><button class="btn sm" data-a="timeout">Timeout</button>
-        <button class="btn sm" data-a="refresh">Test</button>
-        ${a.configurable ? '<button class="btn sm" data-a="configure">Configure</button>' : ''}
-        <button class="btn sm" data-a="copy">Copy URL</button>
-        <button class="btn sm" data-a="up" ${i ? '' : 'disabled'}>↑</button><button class="btn sm" data-a="down" ${i < L.length - 1 ? '' : 'disabled'}>↓</button>
-        <button class="btn sm danger" data-a="remove">Remove</button></div></div></div>`).join('') || '<p class="mut">No addons yet. Paste an addon URL above.</p>';
-    $$('#ad-list [data-a]').forEach(b => b.onclick = () => this.addonAction(b.closest('.item').dataset.id, b.dataset.a));
+    $('#ad-list').innerHTML = L.map((a, i) => {
+      const st = a.last_ok === false ? `<span class="hstat bad" title="${esc(a.last_error || '')}">${esc((a.last_error || 'error').slice(0, 40))}</span>`
+        : a.last_ok ? `<span class="hstat ok">Online${a.latency_ms != null ? ' · ' + a.latency_ms + ' ms' : ''}</span>` : '<span class="hstat">Untested</span>';
+      return `<div class="card ad ${a.enabled ? '' : 'off'}" data-id="${esc(a.id)}" style="--i:${i};--h:${hue(a.name)}">
+      <span class="ad-rank">#${i + 1}</span>
+      <div class="ad-main">
+       <div class="ad-logo">${esc(initial(a.name))}${a.logo ? `<img src="${esc(a.logo)}" alt="" onerror="this.remove()">` : ''}</div>
+       <div class="ad-info"><div class="ad-name">${esc(a.name)} <small>v${esc(a.version)}</small></div>
+        <div class="ad-desc">${esc(a.description)}</div>
+        <div class="badges">${st}${a.resources.map(r => `<span class="b">${esc(r)}</span>`).join('')}${a.types.map(t => `<span class="b">${esc(t)}</span>`).join('')}<span class="b">${ic('clock')}${a.timeout_secs}s</span></div>
+        <div class="ad-url" title="${esc(a.url_masked)}">${esc(a.url_masked)}</div></div>
+      </div>
+      <div class="ad-foot">
+       <label class="tgl on-l" title="${a.enabled ? 'Enabled' : 'Disabled'}"><input type="checkbox" data-a="toggle" ${a.enabled ? 'checked' : ''} aria-label="Enabled"><i class="sw"></i><span style="margin-left:8px">${a.enabled ? 'On' : 'Off'}</span></label>
+       <span class="sp"></span>
+       <button class="btn sm" data-a="refresh" aria-label="Test">${ic('bolt')}<span>Test</span></button>
+       ${a.configurable ? `<button class="btn sm" data-a="configure" aria-label="Configure">${ic('sliders')}<span>Configure</span></button>` : ''}
+       <button class="btn sm" data-a="rename" aria-label="Rename">${ic('edit')}<span>Rename</span></button>
+       <button class="btn sm" data-a="timeout" aria-label="Timeout">${ic('clock')}<span>Timeout</span></button>
+       <button class="btn sm" data-a="copy" aria-label="Copy URL">${ic('copy')}<span>Copy URL</span></button>
+       <button class="btn sm" data-a="up" aria-label="Move up" ${i ? '' : 'disabled'}>${ic('up')}</button><button class="btn sm" data-a="down" aria-label="Move down" ${i < L.length - 1 ? '' : 'disabled'}>${ic('down')}</button>
+       <button class="btn sm danger" data-a="remove" aria-label="Remove">${ic('trash')}<span>Remove</span></button>
+      </div></div>`; }).join('') || stateBox('addons', 'No addons yet', 'Paste a Stremio addon manifest URL above to start finding streams.');
+    $$('#ad-list [data-a]').forEach(b => { const f = () => this.addonAction(b.closest('.ad').dataset.id, b.dataset.a); b.type === 'checkbox' ? b.onchange = f : b.onclick = f; });
   },
   async addAddon() {
-    const url = $('#ad-url').value.trim(); if (!url) return;
-    $('#ad-msg').textContent = 'Adding…';
-    try { await invoke('addons_add', {url}); $('#ad-url').value = ''; $('#ad-msg').textContent = ''; this.loadAddons(); }
-    catch (e) { $('#ad-msg').innerHTML = `<span class="bad">${esc(String(e))}</span>`; }
+    const url = $('#ad-url').value.trim(); if (!url) return $('#ad-url').focus();
+    const m = $('#ad-msg'); m.classList.remove('err'); m.innerHTML = '<span class="spin"></span>Adding…'; $('#ad-add').disabled = true;
+    try { await invoke('addons_add', {url}); $('#ad-url').value = ''; m.textContent = ''; this.loadAddons(); }
+    catch (e) { m.classList.add('err'); m.textContent = String(e); }
+    $('#ad-add').disabled = false;
   },
   async addonAction(id, act) {
     const a = this.addons.find(x => x.id === id);
     try {
       if (act === 'toggle') await invoke('addons_update', {id, enabled: !a.enabled});
-      else if (act === 'rename') { const n = prompt('Name', a.name); if (n) await invoke('addons_update', {id, name: n}); }
-      else if (act === 'timeout') { const t = prompt('Timeout (seconds, 3-120)', a.timeout_secs); if (t) await invoke('addons_update', {id, timeoutSecs: +t}); }
-      else if (act === 'refresh') await invoke('addons_refresh', {id});
+      else if (act === 'rename') { const n = await this.ask({title: 'Rename addon', ok: 'Save', input: {value: a.name}}); if (n) await invoke('addons_update', {id, name: n}); }
+      else if (act === 'timeout') { const t = await this.ask({title: 'Timeout', msg: 'Seconds to wait for this addon (3 to 120).', ok: 'Save', input: {value: a.timeout_secs}}); if (t) await invoke('addons_update', {id, timeoutSecs: +t}); }
+      else if (act === 'refresh') { this.toast('Testing ' + a.name + '…', 1500); await invoke('addons_refresh', {id}); }
       else if (act === 'configure') await invoke('addon_configure', {id});
       else if (act === 'copy') { await navigator.clipboard.writeText(await invoke('addon_url', {id})); this.toast('Addon URL copied (keep it private)'); }
-      else if (act === 'remove') { if (!confirm('Remove ' + a.name + '?')) return; await invoke('addons_remove', {id}); }
+      else if (act === 'remove') { if (!await this.ask({title: 'Remove ' + a.name + '?', msg: 'You can add it again later with its URL.', ok: 'Remove', danger: true})) return; await invoke('addons_remove', {id}); }
       else if (act === 'up' || act === 'down') {
         const ids = this.addons.map(x => x.id), i = ids.indexOf(id), j = act === 'up' ? i - 1 : i + 1;
         [ids[i], ids[j]] = [ids[j], ids[i]]; await invoke('addons_reorder', {ids});
       }
-    } catch (e) { this.toast(String(e), 4000); }
+    } catch (e) { this.err(e); }
     this.loadAddons();
   },
   async exportAddons() {
-    if (!confirm('The export contains full addon URLs, which may include private settings. Copy to clipboard?')) return;
-    const l = await invoke('addons_export');
-    try { await navigator.clipboard.writeText(l.map(x => x.url).join('\n')); this.toast('Copied ' + l.length + ' URLs'); } catch (e) { this.toast(String(e)); }
+    if (!await this.ask({title: 'Export addon URLs?', msg: 'The export contains full addon URLs, which may include private settings. Copy to clipboard?', ok: 'Copy'})) return;
+    try { const l = await invoke('addons_export'); await navigator.clipboard.writeText(l.map(x => x.url).join('\n')); this.toast('Copied ' + l.length + ' URLs'); } catch (e) { this.err(e); }
   },
   async importAddons() {
-    const t = prompt('Paste addon URLs, one per line'); if (!t) return;
-    const r = await invoke('addons_import', {urls: t.split(/\s+/)});
-    this.toast(`Added ${r.added}` + (r.errors.length ? `, ${r.errors.length} failed: ${r.errors[0]}` : ''), 5000); this.loadAddons();
+    const t = await this.ask({title: 'Import addons', msg: 'Paste addon URLs, separated by spaces or new lines.', ok: 'Import', input: {placeholder: 'https://…/manifest.json'}}); if (!t) return;
+    try {
+      const r = await invoke('addons_import', {urls: t.split(/\s+/).filter(Boolean)});
+      this.toast(`Added ${r.added}` + (r.errors.length ? `, ${r.errors.length} failed: ${r.errors[0]}` : ''), 5000, r.errors.length ? 'bad' : ''); this.loadAddons();
+    } catch (e) { this.err(e); }
   },
 
   /* ---------- SETTINGS ---------- */
   async loadSettings() {
-    const c = await invoke('config_get');
+    const c = await invoke('config_get').catch(() => ({}));
+    this.hasKey = !!c.has_key;
     $('#s-key').placeholder = c.has_key ? '•••••• saved (leave blank to keep)' : 'paste your TorBox API key';
+    const p = $('#s-state'); p.textContent = c.has_key ? 'Connected' : 'Not set'; p.classList.toggle('ok', !!c.has_key);
   },
   async saveSettings() {
+    const m = $('#s-msg'); m.classList.remove('err');
     const r = await this.api('/api/config', {torbox_key: $('#s-key').value});
-    $('#s-key').value = ''; $('#s-msg').textContent = r.error || 'Saved ✓'; this.loadSettings();
+    $('#s-key').value = '';
+    if (r.error) { m.classList.add('err'); m.textContent = r.error; } else { m.textContent = 'Saved'; this.toast('API key saved'); }
+    this.loadSettings();
   },
 };
 App.init();

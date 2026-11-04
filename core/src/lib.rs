@@ -3,5 +3,6 @@ pub mod addons;
 pub mod config;
 pub mod jobs;
 pub mod parse;
+pub mod player;
 pub mod playlist;
 pub mod torbox;

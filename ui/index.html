@@ -3,151 +3,270 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#121110" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Stream Playlist">
+<meta name="apple-mobile-web-app-title" content="Companion">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
-<title>Stream Playlist</title>
+<title>Companion for TorBox</title>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
- <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
- <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
- <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9.5 4.3 4.3 0 0 1 17.5 18z"/></symbol>
- <symbol id="i-play" viewBox="0 0 24 24"><path d="M5 4v16l14-8z"/></symbol>
- <symbol id="i-puzzle" viewBox="0 0 24 24"><path d="M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4z"/></symbol>
- <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></symbol>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+ <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+ <symbol id="i-results" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L6.8 5M3.5 12l1.2 1.2L6.8 11M3.5 18l1.2 1.2L6.8 17"/></symbol>
+ <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="m4 7 8 4 8-4M12 11v10"/></symbol>
+ <symbol id="i-playlist" viewBox="0 0 24 24"><path d="M4 6h11M4 11h11M4 16h6"/><path d="M15.5 14.2v5.6l4.7-2.8z" fill="currentColor"/></symbol>
+ <symbol id="i-addons" viewBox="0 0 24 24"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></symbol>
+ <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+ <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.8v14.4a1 1 0 0 0 1.5.85l11.2-7.2a1 1 0 0 0 0-1.7L8.5 3.95A1 1 0 0 0 7 4.8z" fill="currentColor"/></symbol>
+ <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/></symbol>
+ <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+ <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+ <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></symbol>
+ <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></symbol>
+ <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+ <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></symbol>
+ <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v3.5h3.5M4 13a8 8 0 0 0 14.5 4M20 20v-3.5h-3.5"/></symbol>
+ <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+ <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+ <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5m0 0-4 4m4-4 4 4M5 19h14"/></symbol>
+ <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/></symbol>
+ <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+ <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l.8 12.5h8.4L17 7"/></symbol>
+ <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+ <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M4 4l16 16M9.8 5.8A9 9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a15 15 0 0 1-3 3.7M6.4 7.6A15 15 0 0 0 2.5 12S6 18.5 12 18.5c1.5 0 2.8-.4 4-.9"/></symbol>
+ <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 13.5h6L10 21l9-11h-6.5z"/></symbol>
+ <symbol id="i-seed" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 16V8m0 0-3 3m3-3 3 3"/></symbol>
+ <symbol id="i-film" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M8 4.5v15M16 4.5v15M3.5 9.5H8M3.5 14.5H8M16 9.5h4.5M16 14.5h4.5"/></symbol>
+ <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17.2v.1"/></symbol>
+ <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.700l1-1"/></symbol>
+ <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="9" r="2" fill="var(--surface)"/><circle cx="12" cy="15" r="2" fill="var(--surface)"/><circle cx="19" cy="8" r="2" fill="var(--surface)"/></symbol>
+ <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.400 1.400M18.400 5.600 17 7M7 17l-1.400 1.400"/></symbol>
+ <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.500A8 8 0 0 1 9.500 4 8 8 0 1 0 20 14.500z"/></symbol>
+ <symbol id="i-auto" viewBox="0 0 24 24"><rect x="3" y="4.500" width="18" height="12" rx="2.500"/><path d="M8 20h8M12 16.500V20"/></symbol>
+ <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 8.500-8.500M16 7l2.500 2.500"/></symbol>
+ <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.500" y="4.500" width="17" height="15" rx="2.500"/><path d="M9.500 4.500v15"/></symbol>
+ <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M12 11v5M12 8v.1"/></symbol>
 </svg>
 
+<a class="skip" href="#main">Skip to content</a>
 <div id="app" class="shell" hidden>
- <nav class="nav" id="nav">
-  <div class="brand"><img src="icon.svg" alt="" width="28" height="28"><span>Stream&nbsp;Playlist</span></div>
-  <button data-v="find" class="on"><svg><use href="#i-search"/></svg><span>Find</span></button>
-  <button data-v="results"><svg><use href="#i-list"/></svg><span>Results</span><b id="rcount" hidden></b></button>
-  <button data-v="addons"><svg><use href="#i-puzzle"/></svg><span>Addons</span></button>
-  <button data-v="library"><svg><use href="#i-cloud"/></svg><span>TorBox</span></button>
-  <button data-v="playlists"><svg><use href="#i-play"/></svg><span>Playlists</span></button>
-  <button data-v="settings"><svg><use href="#i-gear"/></svg><span>Settings</span></button>
- </nav>
+ <aside class="side" id="side">
+  <div class="brand">
+   <img src="icon.svg" alt="" width="34" height="34">
+   <div class="brand-t"><b>Companion</b><span>for TorBox</span></div>
+  </div>
+  <nav id="nav" aria-label="Sections">
+   <div class="grp">Discover</div>
+   <button data-v="find" class="on"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span>Search</span></button>
+   <button data-v="results"><svg class="ic" aria-hidden="true"><use href="#i-results"/></svg><span>Results</span><b id="rcount" hidden></b></button>
+   <div class="grp">Library</div>
+   <button data-v="library"><svg class="ic" aria-hidden="true"><use href="#i-box"/></svg><span>TorBox</span></button>
+   <button data-v="playlists"><svg class="ic" aria-hidden="true"><use href="#i-playlist"/></svg><span>Playlists</span></button>
+   <div class="grp">Configure</div>
+   <button data-v="addons"><svg class="ic" aria-hidden="true"><use href="#i-addons"/></svg><span>Addons</span></button>
+   <button data-v="settings"><svg class="ic" aria-hidden="true"><use href="#i-gear"/></svg><span>Settings</span></button>
+  </nav>
+  <div class="side-foot">
+   <button class="rail-toggle" id="railtog" aria-label="Expand navigation" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-panel"/></svg><span>Collapse</span></button>
+   <p>Unofficial companion.<br>Not affiliated with TorBox or Stremio.</p>
+  </div>
+ </aside>
+ <div class="scrim" id="navscrim"></div>
 
- <main>
-  <!-- FIND -->
+ <main id="main" tabindex="-1">
+  <!-- SEARCH -->
   <section id="v-find">
-   <h1>Find a title</h1>
-   <div class="card">
-    <div class="seg" id="kindseg"><button data-k="movie" class="on">Movie</button><button data-k="series">Series</button></div>
-    <div class="row">
-     <input id="q" class="grow" type="search" placeholder="Search title…" enterkeyhint="search">
-     <button class="btn primary" id="qgo">Search</button>
-    </div>
-    <div class="row"><input id="imdb" placeholder="or IMDb id (tt1234567)" autocapitalize="off" autocorrect="off"></div>
-    <div id="hits" class="hits"></div>
+   <header class="ph"><div class="kick"><i>01</i> Discover</div><h1>What are we watching?</h1>
+    <p class="lede">Search a title, pull streams from every addon you have enabled, then send the keepers to TorBox.</p></header>
+   <div id="keybanner" class="banner" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>
+    <div><b>Connect TorBox to get started</b><span>Paste your API key in Settings before sending anything.</span></div>
+    <button class="btn sm" data-goto="settings">Open Settings</button>
    </div>
-   <div class="card" id="epcard" hidden>
-    <div class="grid3">
-     <label>Season<input id="season" type="number" min="0" value="1" inputmode="numeric"></label>
-     <label>From ep<input id="ep1" type="number" min="1" value="1" inputmode="numeric"></label>
-     <label>To ep<input id="ep2" type="number" min="1" value="1" inputmode="numeric"></label>
+   <div class="grid-find">
+    <div class="card pad">
+     <div class="seg" id="kindseg" role="tablist"><button data-k="movie" class="on">Movie</button><button data-k="series">Series</button></div>
+     <div class="searchbar">
+      <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+      <input id="q" aria-label="Search a title" type="search" placeholder="Search a title…" enterkeyhint="search" autocomplete="off">
+      <button class="btn primary" id="qgo">Search</button>
+     </div>
+     <div id="hits" class="hits"></div>
+     <label class="fld mono-in">Or paste an IMDb id<input id="imdb" placeholder="tt1375666" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    </div>
+    <div class="stack">
+     <div class="card pad" id="epcard" hidden>
+      <h3 class="ct">Episodes</h3>
+      <div class="grid3">
+       <label class="fld">Season<input id="season" type="number" min="0" value="1" inputmode="numeric"></label>
+       <label class="fld">From ep<input id="ep1" type="number" min="1" value="1" inputmode="numeric"></label>
+       <label class="fld">To ep<input id="ep2" type="number" min="1" value="1" inputmode="numeric"></label>
+      </div>
+     </div>
+     <div class="card pad fetch">
+      <h3 class="ct">Fetch</h3>
+      <p class="mut small">Queries every enabled addon in parallel and merges the results.</p>
+      <button class="btn primary wide lg" id="fetchgo"><svg class="ic" aria-hidden="true"><use href="#i-bolt"/></svg>Fetch streams</button>
+      <div id="fstatus" class="status" aria-live="polite"></div>
+     </div>
     </div>
    </div>
-   <div class="row"><button class="btn primary wide" id="fetchgo">Fetch streams</button></div>
-   <p id="fstatus" class="mut"></p>
   </section>
 
   <!-- RESULTS -->
   <section id="v-results" hidden>
-   <div class="head"><h1>Results</h1>
-    <div class="row">
-     <select id="sort">
-      <option value="best">Best match</option><option value="res">Resolution</option>
-      <option value="size">Size ↓</option><option value="sizeasc">Size ↑</option>
-      <option value="seeds">Seeders</option>
-     </select>
-     <button class="btn" id="fbtn">Filters <b id="fcount" hidden></b></button>
+   <header class="ph row-ph"><div><div class="kick"><i>02</i> Discover</div><h1 id="rtitle">Results</h1>
+    <p class="lede" id="rstatus"></p></div>
+    <div class="ph-actions">
+     <label class="sel-wrap"><span class="sr">Sort</span>
+      <select id="sort">
+       <option value="best">Best match</option><option value="res">Resolution</option>
+       <option value="size">Size, largest</option><option value="sizeasc">Size, smallest</option>
+       <option value="seeds">Seeders</option>
+      </select></label>
+     <button class="btn" id="fbtn"><svg class="ic" aria-hidden="true"><use href="#i-filter"/></svg>Filters <b id="fcount" class="cnt" hidden></b></button>
+    </div>
+   </header>
+   <div class="res-grid">
+    <aside id="filters" class="filters" aria-label="Filters">
+     <div class="fh"><h3>Filters</h3><button class="btn sm ghost" id="freset">Reset</button><button class="icon-btn fclose" id="fclose" aria-label="Close filters"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+     <div class="fbody">
+      <div class="fgroup">
+       <label class="fld">Min resolution<select id="f-res"><option value="0">Any</option><option value="480">480p</option><option value="720">720p</option><option value="1080" selected>1080p</option><option value="2160">4K</option></select></label>
+       <div class="grid2">
+        <label class="fld">Min size (GB)<input id="f-min" type="number" min="0" step="0.5" value="0" inputmode="decimal"></label>
+        <label class="fld">Max size (GB)<input id="f-max" type="number" min="0" step="0.5" value="0" inputmode="decimal"></label>
+       </div>
+       <label class="fld">Min seeders<input id="f-seeds" type="number" min="0" value="0" inputmode="numeric"></label>
+      </div>
+      <div class="fgroup">
+       <div class="chips" id="c-addon"><span class="lbl">Addon</span></div>
+       <div class="chips" id="c-codec"><span class="lbl">Codec</span></div>
+       <div class="chips" id="c-hdr"><span class="lbl">HDR</span></div>
+       <div class="chips" id="c-audio"><span class="lbl">Audio</span></div>
+       <div class="chips" id="c-quality"><span class="lbl">Source</span></div>
+      </div>
+      <div class="fgroup">
+       <label class="fld">Exclude words <small>comma separated</small><input id="f-ex" value="cam,telesync,hdts" autocapitalize="off" spellcheck="false"></label>
+       <label class="fld">Must include<input id="f-in" placeholder="e.g. x265" autocapitalize="off" spellcheck="false"></label>
+       <label class="sw-row"><input id="f-cached" type="checkbox" checked><i class="sw"></i><span>Cached on debrid only</span></label>
+       <label class="sw-row"><input id="f-best" type="checkbox" checked><i class="sw"></i><span>Best 1 per episode</span></label>
+      </div>
+     </div>
+    </aside>
+    <div class="fscrim" id="fscrim"></div>
+    <div class="res-main">
+     <div id="rlist" class="list"></div>
+     <div id="job"></div>
     </div>
    </div>
-   <div id="filters" class="card" hidden>
-    <div class="grid2">
-     <label>Min resolution<select id="f-res"><option value="0">Any</option><option value="480">480p</option><option value="720">720p</option><option value="1080" selected>1080p</option><option value="2160">4K</option></select></label>
-     <label>Max size (GB, 0 = none)<input id="f-max" type="number" min="0" step="0.5" value="0"></label>
-     <label>Min size (GB)<input id="f-min" type="number" min="0" step="0.5" value="0"></label>
-     <label>Min seeders<input id="f-seeds" type="number" min="0" value="0"></label>
-    </div>
-    <div class="chips" id="c-addon"><span class="lbl">Addon</span></div>
-    <div class="chips" id="c-codec"><span class="lbl">Codec</span></div>
-    <div class="chips" id="c-hdr"><span class="lbl">HDR</span></div>
-    <div class="chips" id="c-audio"><span class="lbl">Audio</span></div>
-    <div class="chips" id="c-quality"><span class="lbl">Source</span></div>
-    <div class="grid2">
-     <label>Exclude words (comma)<input id="f-ex" value="cam,telesync,hdts"></label>
-     <label>Must include<input id="f-in" placeholder="e.g. x265"></label>
-    </div>
-    <label class="chk"><input id="f-cached" type="checkbox" checked> Cached on debrid only</label>
-    <label class="chk"><input id="f-best" type="checkbox" checked> Best 1 per episode</label>
-    <div class="row"><button class="btn" id="freset">Reset</button></div>
-   </div>
-   <p id="rstatus" class="mut"></p>
-   <div id="rlist" class="list"></div>
    <div id="sendbar" class="sendbar" hidden>
     <div class="sb-top">
-     <span id="selinfo"></span>
-     <button class="lnk" id="selall">All</button><button class="lnk" id="selnone">None</button>
+     <span id="selinfo" class="sel-count"></span>
+     <span class="sb-links"><button class="lnk" id="selall">All</button><button class="lnk" id="selnone">None</button></span>
+     <details class="opts"><summary>Options</summary>
+      <div class="opts-pop">
+       <label class="sw-row"><input id="o-append" type="checkbox"><i class="sw"></i><span>Append to existing playlist</span></label>
+       <label class="sw-row"><input id="o-addonly" type="checkbox"><i class="sw"></i><span>Only add to TorBox (no playlist)</span></label>
+      </div>
+     </details>
     </div>
-    <div class="row">
-     <input id="plname" class="grow" placeholder="Playlist name" value="playlist">
-     <button class="btn primary" id="sendgo">Send to TorBox</button>
+    <div class="sb-row">
+     <input id="plname" placeholder="Playlist name" value="playlist" aria-label="Playlist name">
+     <button class="btn primary" id="sendgo"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Send to TorBox</button>
     </div>
-    <details class="opts"><summary>Options</summary>
-     <label class="chk"><input id="o-append" type="checkbox"> Append to existing playlist</label>
-     <label class="chk"><input id="o-addonly" type="checkbox"> Only add to TorBox (no playlist)</label>
-    </details>
    </div>
-   <div id="job"></div>
-  </section>
-
-  <!-- ADDONS -->
-  <section id="v-addons" hidden>
-   <div class="head"><h1>Addons</h1><button class="btn" id="ad-refresh">Refresh all</button></div>
-   <div class="card">
-    <div class="row"><input id="ad-url" class="grow" placeholder="Addon URL (https://…/manifest.json or stremio://…)" autocapitalize="off" autocorrect="off"><button class="btn primary" id="ad-add">Add</button></div>
-    <div class="row"><button class="btn sm" id="ad-import">Import…</button><button class="btn sm" id="ad-export">Export</button></div>
-    <p class="mut">Any Stremio-compatible addon works. Results from all enabled addons are merged and de-duplicated. Addon URLs can contain private settings, so treat them like passwords.</p>
-   </div>
-   <div id="ad-msg" class="mut"></div>
-   <div id="ad-list" class="list"></div>
   </section>
 
   <!-- LIBRARY -->
   <section id="v-library" hidden>
-   <div class="head"><h1>TorBox library</h1><button class="btn" id="libreload">Refresh</button></div>
-   <p class="mut">Everything already on your TorBox account. Pick items to turn into a playlist (all video files in each).</p>
-   <input id="libq" type="search" placeholder="Filter…">
+   <header class="ph row-ph"><div><div class="kick"><i>03</i> Library</div><h1>On TorBox</h1>
+    <p class="lede">Everything already in your account. Tick items to turn every video file inside them into a playlist.</p></div>
+    <div class="ph-actions"><button class="btn" id="libreload"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh</button></div></header>
+   <div class="searchbar slim"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="libq" aria-label="Filter library" type="search" placeholder="Filter your library…"></div>
    <div id="liblist" class="list"></div>
-   <div class="row sticky"><input id="libname" class="grow" placeholder="Playlist name" value="torbox"><button class="btn primary" id="libgo">Build playlist</button></div>
+   <div class="buildbar">
+    <input id="libname" placeholder="Playlist name" value="torbox" aria-label="Playlist name">
+    <button class="btn primary" id="libgo"><svg class="ic" aria-hidden="true"><use href="#i-playlist"/></svg>Build playlist</button>
+   </div>
    <div id="libjob"></div>
   </section>
 
   <!-- PLAYLISTS -->
   <section id="v-playlists" hidden>
-   <div class="head"><h1>Playlists</h1></div>
-   <div id="pllist" class="list"></div>
-   <div id="pledit" class="card" hidden></div>
+   <header class="ph"><div class="kick"><i>04</i> Library</div><h1>Playlists</h1>
+    <p class="lede">Your saved <code>.m3u8</code> files. Play them here, reorder, or hand them to another player.</p></header>
+   <div class="pl-grid">
+    <div id="pllist" class="list"></div>
+    <div id="pledit" class="card pad editor" hidden></div>
+   </div>
+  </section>
+
+  <!-- ADDONS -->
+  <section id="v-addons" hidden>
+   <header class="ph row-ph"><div><div class="kick"><i>05</i> Configure</div><h1>Addons</h1>
+    <p class="lede">Any Stremio-compatible addon works. Enabled addons are queried in order and merged.</p></div>
+    <div class="ph-actions"><button class="btn" id="ad-refresh"><svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg>Test all</button></div></header>
+   <div class="card pad adder">
+    <div class="searchbar slim"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><input id="ad-url" aria-label="Addon URL" placeholder="Paste addon manifest URL" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn primary" id="ad-add"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Add</button></div>
+    <div class="adder-foot">
+     <p class="mut small"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Addon URLs can contain private settings. Treat them like passwords.</p>
+     <span class="sb-links"><button class="btn sm ghost" id="ad-import"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg>Import</button><button class="btn sm ghost" id="ad-export"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>Export</button></span>
+    </div>
+    <div id="ad-msg" class="status" aria-live="polite"></div>
+   </div>
+   <div id="ad-list" class="list ad-list"></div>
   </section>
 
   <!-- SETTINGS -->
   <section id="v-settings" hidden>
-   <h1>Settings</h1>
-   <div class="card">
-    <label>TorBox API key<input id="s-key" type="password" placeholder="paste your TorBox API key" autocomplete="off"></label>
-    <div class="row"><button class="btn primary" id="s-save">Save</button><span id="s-msg" class="mut"></span></div>
-    <p class="mut">Stored only on this device. Unofficial companion app; not affiliated with TorBox or Stremio. You are responsible for the content you access.</p>
+   <header class="ph"><div class="kick"><i>06</i> Configure</div><h1>Settings</h1></header>
+   <div class="set-grid">
+    <nav class="subnav" id="subnav" aria-label="Settings sections">
+     <button class="on" data-s="services"><svg class="ic" aria-hidden="true"><use href="#i-key"/></svg>Services</button>
+     <button data-s="appearance"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg>Appearance</button>
+     <button data-s="about"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>About</button>
+    </nav>
+    <div class="set-body">
+     <div class="card pad sgroup" id="s-services">
+      <div class="sg-h"><div><h3>TorBox</h3><p class="mut small">Required to add torrents and read your library.</p></div><span class="pill" id="s-state">Not set</span></div>
+      <label class="fld">API key
+       <span class="with-btn"><input id="s-key" type="password" placeholder="paste your TorBox API key" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="icon-btn" id="s-eye" type="button" aria-label="Show key"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg></button></span>
+      </label>
+      <div class="row"><button class="btn primary" id="s-save">Save key</button><span id="s-msg" class="status inline" aria-live="polite"></span></div>
+      <p class="mut small">Stored only on this device.</p>
+     </div>
+     <div class="card pad sgroup" id="s-appearance" hidden>
+      <div class="sg-h"><div><h3>Theme</h3><p class="mut small">Follow the system, or pick one.</p></div></div>
+      <div class="seg wide" id="themeseg">
+       <button data-t="auto" class="on"><svg class="ic" aria-hidden="true"><use href="#i-auto"/></svg>System</button>
+       <button data-t="light"><svg class="ic" aria-hidden="true"><use href="#i-sun"/></svg>Light</button>
+       <button data-t="dark"><svg class="ic" aria-hidden="true"><use href="#i-moon"/></svg>Dark</button>
+      </div>
+     </div>
+     <div class="card pad sgroup" id="s-about" hidden>
+      <div class="about"><img src="icon.svg" alt="" width="56" height="56"><div><h3>Companion for TorBox</h3><p class="mut small">An unofficial companion app. Not affiliated with TorBox or Stremio. You are responsible for the content you access.</p></div></div>
+     </div>
+    </div>
    </div>
   </section>
  </main>
 </div>
-<div id="toast" class="toast" hidden></div>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<div id="modal" class="modal" hidden>
+ <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="m-title">
+  <h3 id="m-title"></h3>
+  <p id="m-msg" class="mut"></p>
+  <input id="m-input" hidden>
+  <div class="dlg-act"><button class="btn" id="m-cancel">Cancel</button><button class="btn primary" id="m-ok">OK</button></div>
+ </div>
+</div>
+<script src="mock.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
