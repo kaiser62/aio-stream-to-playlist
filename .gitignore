@@ -7,3 +7,9 @@ downloads/
 target/
 src-tauri/gen/
 src-tauri/icons/
+build/rustup/
+build/cargo/
+build/target/
+build/node/
+build/downloads/
+build/dist/
