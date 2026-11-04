@@ -241,3 +241,4 @@ html.panel .sb-sec { padding: 0; margin: 0; }
 .fx-row { font-size: 10.5px; font-weight: 500; gap: 2px; }
 .fx-row select { background-color: transparent !important; border: 0; border-bottom: 1px solid rgba(255,255,255,.22); border-radius: 0; height: 24px; padding-left: 0; font-size: 12px; }
 .sb-hint { display: none; }
+html.panel #sidebar, html.panel.pglass #sidebar { background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; }
